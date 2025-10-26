@@ -419,6 +419,46 @@ export class FileOperations {
   }
 
   /**
+   * Export conversation to markdown format
+   */
+  static exportToMarkdown(filePath: string): string {
+    const messages = FileOperations.parseConversation(filePath);
+    const title = FileOperations.getConversationTitle(filePath);
+
+    let markdown = `# ${title}\n\n`;
+    markdown += `*Exported from Claude Code on ${new Date().toLocaleString()}*\n\n`;
+    markdown += '---\n\n';
+
+    for (const message of messages) {
+      // Skip metadata and sidechain messages
+      if ('_metadata' in message || message.isSidechain) {
+        continue;
+      }
+
+      const role = message.type === 'user' ? '👤 User' : '🤖 Assistant';
+      markdown += `## ${role}\n\n`;
+
+      const content = message.message.content;
+
+      if (typeof content === 'string') {
+        markdown += `${content}\n\n`;
+      } else if (Array.isArray(content)) {
+        for (const item of content) {
+          if (item.type === 'text' && item.text) {
+            markdown += `${item.text}\n\n`;
+          } else if (item.type === 'tool_use') {
+            markdown += `\`\`\`json\n${JSON.stringify(item, null, 2)}\n\`\`\`\n\n`;
+          }
+        }
+      }
+
+      markdown += '---\n\n';
+    }
+
+    return markdown;
+  }
+
+  /**
    * Check if backups should be created
    */
   private static shouldCreateBackup(): boolean {

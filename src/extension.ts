@@ -174,6 +174,20 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Command: Export to markdown
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'claudeCodeConversationManager.exportToMarkdown',
+      async (item: ConversationTreeItem) => {
+        if (!(item instanceof ConversationTreeItem)) {
+          return;
+        }
+
+        await manager.exportToMarkdown(item.conversation);
+      }
+    )
+  );
+
   // Command: Delete conversation
   context.subscriptions.push(
     vscode.commands.registerCommand(

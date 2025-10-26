@@ -158,6 +158,43 @@ export class ConversationManager {
   }
 
   /**
+   * Export conversation to markdown
+   */
+  async exportToMarkdown(conversation: Conversation): Promise<void> {
+    try {
+      const markdown = FileOperations.exportToMarkdown(conversation.filePath);
+
+      // Ask user where to save
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(`${conversation.title}.md`),
+        filters: {
+          'Markdown': ['md']
+        }
+      });
+
+      if (!uri) {
+        return;
+      }
+
+      // Write markdown file
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(markdown, 'utf-8'));
+
+      const action = await vscode.window.showInformationMessage(
+        `Exported to: ${uri.fsPath}`,
+        'Open File'
+      );
+
+      if (action === 'Open File') {
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(doc);
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to export conversation: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
    * Find conversation by ID
    */
   findConversationById(conversationId: string): Conversation | null {
