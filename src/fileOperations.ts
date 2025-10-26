@@ -49,11 +49,33 @@ export class FileOperations {
   }
 
   /**
-   * Check if conversation has any real user messages (not just warmup/sidechain)
+   * Check if conversation has any real user messages (not just warmup/sidechain/system)
    */
   static hasRealMessages(filePath: string): boolean {
     const firstMessage = FileOperations.getFirstUserMessage(filePath);
-    return firstMessage !== null;
+
+    if (!firstMessage) {
+      return false;
+    }
+
+    // Check if the message is just system metadata (like <ide_opened_file>, <system-reminder>, etc.)
+    const content = firstMessage.message.content;
+    let text = '';
+
+    if (typeof content === 'string') {
+      text = content;
+    } else if (Array.isArray(content)) {
+      for (const item of content) {
+        if (item.type === 'text' && item.text) {
+          text += item.text;
+        }
+      }
+    }
+
+    // Filter out system messages that look like IDE metadata
+    const isSystemMessage = /^<(ide_|system-|user-)/.test(text.trim());
+
+    return !isSystemMessage;
   }
 
   /**
