@@ -63,10 +63,12 @@ export class FileOperations {
     const firstMessage = FileOperations.getFirstUserMessage(filePath);
 
     if (!firstMessage) {
+      console.log('[FileOperations] No first message found for:', filePath);
       return 'Untitled';
     }
 
     const content = firstMessage.message.content;
+    console.log('[FileOperations] Content type:', typeof content, 'Content:', JSON.stringify(content).substring(0, 100));
 
     // Handle string content
     if (typeof content === 'string') {
@@ -82,6 +84,7 @@ export class FileOperations {
       }
     }
 
+    console.log('[FileOperations] Could not extract title from content');
     return 'Untitled';
   }
 
@@ -95,7 +98,7 @@ export class FileOperations {
     }
 
     const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n').filter(line => line.trim());
+    const lines = content.split('\n');
 
     // Find first non-sidechain user messages
     let firstMessageIdx: number | null = null;
@@ -104,8 +107,13 @@ export class FileOperations {
     let userMessageCount = 0;
 
     for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        continue;
+      }
+
       try {
-        const message = JSON.parse(lines[i]) as ConversationMessage;
+        const message = JSON.parse(line) as ConversationMessage;
 
         // Skip metadata
         if ('_metadata' in message) {
@@ -137,8 +145,18 @@ export class FileOperations {
     let titleExists = false;
     if (secondMessageIdx === firstMessageIdx + 1) {
       const firstContent = firstMessageData.message.content;
+
+      // Check if it's a short string
       if (typeof firstContent === 'string' && firstContent.length < 100) {
         titleExists = true;
+      }
+
+      // Check if it's a short array with text (our title format)
+      if (Array.isArray(firstContent) && firstContent.length === 1) {
+        const item = firstContent[0];
+        if (item.type === 'text' && item.text && item.text.length < 100) {
+          titleExists = true;
+        }
       }
     }
 
