@@ -4,6 +4,30 @@
 
 Never lose track of your AI conversations again. Claude Chats brings powerful conversation management directly into VS Code, helping you stay organized as you work with Claude Code.
 
+## ⚠️ Legal Disclaimer
+
+**USE AT YOUR OWN RISK**
+
+This extension directly modifies Claude Code conversation files (`.jsonl` format). While we take precautions:
+
+- ✅ **Automatic backups** are created before any modification (`.jsonl.backup` files)
+- ✅ Backups can be disabled in settings if desired
+- ⚠️ **This is a hacky solution** - we're directly editing conversation files
+- ⚠️ We try our best to stay compatible with Claude Code's format
+- ⚠️ **No guarantees** if Anthropic makes breaking changes to the file format
+- ⚠️ The extension may stop working after Claude Code updates
+
+**Why this approach?**
+This extension provides rename and management capabilities that Claude Code doesn't officially support yet. It's a workaround until Anthropic decides to add these features officially.
+
+**Recommendations:**
+- Keep backups enabled (default)
+- Don't modify conversations that are currently open
+- Test on non-critical conversations first
+- Keep your `.jsonl.backup` files safe
+
+By using this extension, you accept that you are responsible for any data loss or corruption that may occur.
+
 ## Features
 
 ### 🗂️ Conversation Organization
