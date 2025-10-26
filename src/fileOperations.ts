@@ -28,10 +28,12 @@ export class FileOperations {
   }
 
   /**
-   * Get the first non-sidechain user message (the title)
+   * Get the first meaningful user message (the title)
+   * Skips warmup, sidechain, and system metadata messages
    */
   static getFirstUserMessage(filePath: string): ConversationMessage | null {
     const messages = FileOperations.parseConversation(filePath);
+    let firstUserMessage: ConversationMessage | null = null;
 
     for (const message of messages) {
       // Skip metadata
@@ -39,43 +41,101 @@ export class FileOperations {
         continue;
       }
 
-      // Find first non-sidechain user message
-      if (message.type === 'user' && message.isSidechain === false) {
-        return message;
+      // Skip sidechain messages
+      if (message.isSidechain) {
+        continue;
       }
+
+      // Look at any message (user or assistant)
+      // Skip if no message content
+      if (!message.message || !message.message.content) {
+        continue;
+      }
+
+      // Get the text content
+      const content = message.message.content;
+      let text = '';
+
+      if (typeof content === 'string') {
+        text = content;
+      } else if (Array.isArray(content)) {
+        for (const item of content) {
+          if (item.type === 'text' && item.text) {
+            text += item.text;
+          }
+        }
+      }
+
+      // Skip if empty
+      if (!text.trim()) {
+        continue;
+      }
+
+      // Skip if it's a system metadata message
+      if (/^<(ide_|system-|user-|command-)/.test(text.trim())) {
+        continue;
+      }
+
+      // Found a real message!
+      // For renamed conversations, the first user message is the title
+      // For others, return the first real message we find
+      if (message.type === 'user' && !firstUserMessage) {
+        firstUserMessage = message;
+      }
+
+      // Always return the first real message (could be user or assistant)
+      return message;
     }
 
-    return null;
+    return firstUserMessage;
   }
 
   /**
    * Check if conversation has any real user messages (not just warmup/sidechain/system)
    */
   static hasRealMessages(filePath: string): boolean {
-    const firstMessage = FileOperations.getFirstUserMessage(filePath);
+    try {
+      const messages = FileOperations.parseConversation(filePath);
 
-    if (!firstMessage) {
+      // Look for any non-sidechain, non-system message
+      for (const message of messages) {
+        // Skip metadata
+        if ('_metadata' in message) {
+          continue;
+        }
+
+        // Skip sidechain messages (warmup, etc.)
+        if (message.isSidechain) {
+          continue;
+        }
+
+        // Get content
+        const content = message.message.content;
+        let text = '';
+
+        if (typeof content === 'string') {
+          text = content;
+        } else if (Array.isArray(content)) {
+          for (const item of content) {
+            if (item.type === 'text' && item.text) {
+              text += item.text;
+            }
+          }
+        }
+
+        // Skip if it's a system metadata message
+        if (/^<(ide_|system-|user-|command-)/.test(text.trim())) {
+          continue;
+        }
+
+        // Found a real message!
+        return true;
+      }
+
+      return false;
+    } catch (error) {
       return false;
     }
-
-    // Check if the message is just system metadata (like <ide_opened_file>, <system-reminder>, etc.)
-    const content = firstMessage.message.content;
-    let text = '';
-
-    if (typeof content === 'string') {
-      text = content;
-    } else if (Array.isArray(content)) {
-      for (const item of content) {
-        if (item.type === 'text' && item.text) {
-          text += item.text;
-        }
-      }
-    }
-
-    // Filter out system messages that look like IDE metadata
-    const isSystemMessage = /^<(ide_|system-|user-)/.test(text.trim());
-
-    return !isSystemMessage;
   }
 
   /**
@@ -304,11 +364,13 @@ export class FileOperations {
         try {
           // Skip empty conversations if setting is disabled
           if (!showEmpty && !FileOperations.hasRealMessages(filePath)) {
+            console.log('[FileOperations] Skipping file (no real messages):', file);
             continue;
           }
 
           const messages = FileOperations.parseConversation(filePath);
           const title = FileOperations.getConversationTitle(filePath);
+          console.log('[FileOperations] Found conversation:', title, 'from file:', file);
 
           conversations.push({
             id: path.parse(file).name,
@@ -366,11 +428,13 @@ export class FileOperations {
         try {
           // Skip empty conversations if setting is disabled
           if (!showEmpty && !FileOperations.hasRealMessages(filePath)) {
+            console.log('[FileOperations] Skipping file (no real messages):', file);
             continue;
           }
 
           const messages = FileOperations.parseConversation(filePath);
           const title = FileOperations.getConversationTitle(filePath);
+          console.log('[FileOperations] Found conversation:', title, 'from file:', file);
 
           conversations.push({
             id: path.parse(file).name,
