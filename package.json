@@ -1,15 +1,38 @@
 {
-  "name": "claude-code-conversation-manager",
-  "displayName": "Claude Code Conversation Manager",
-  "description": "Manage, rename, archive, and organize Claude Code conversations",
+  "name": "claude-chats",
+  "displayName": "Claude Chats",
+  "description": "Organize, rename, and archive your Claude Code conversations",
   "version": "0.1.0",
+  "publisher": "your-publisher-name",
+  "author": {
+    "name": "Your Name"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/claude-chats"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/claude-chats/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "conversation",
+    "chat",
+    "archive",
+    "organize",
+    "manager",
+    "ai",
+    "assistant"
+  ],
   "engines": {
     "vscode": "^1.95.0"
   },
   "categories": [
     "Other"
   ],
-  "icon": "icon.png",
+  "icon": "icon.svg",
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -88,6 +111,11 @@
         {
           "command": "claudeCodeConversationManager.archiveConversation",
           "when": "view == claudeCodeConversationTree && viewItem == conversation",
+          "group": "inline@2"
+        },
+        {
+          "command": "claudeCodeConversationManager.archiveConversation",
+          "when": "view == claudeCodeConversationTree && viewItem == conversation",
           "group": "1_actions@1"
         },
         {
@@ -103,29 +131,29 @@
       ]
     },
     "configuration": {
-      "title": "Claude Code Conversation Manager",
+      "title": "Claude Chats",
       "properties": {
-        "claudeCodeConversationManager.archiveLocation": {
+        "claudeChats.archiveLocation": {
           "type": "string",
           "default": "~/.claude/projects/_archive",
           "description": "Location for archived conversations"
         },
-        "claudeCodeConversationManager.createBackups": {
+        "claudeChats.createBackups": {
           "type": "boolean",
           "default": true,
           "description": "Create backup files before modifying conversations"
         },
-        "claudeCodeConversationManager.confirmArchive": {
+        "claudeChats.confirmArchive": {
           "type": "boolean",
           "default": true,
           "description": "Show confirmation dialog before archiving"
         },
-        "claudeCodeConversationManager.showArchivedInTree": {
+        "claudeChats.showArchivedInTree": {
           "type": "boolean",
           "default": true,
           "description": "Show archived conversations in the tree view"
         },
-        "claudeCodeConversationManager.groupBy": {
+        "claudeChats.groupBy": {
           "type": "string",
           "enum": [
             "project",
@@ -134,7 +162,7 @@
           "default": "project",
           "description": "How to group conversations in the tree view"
         },
-        "claudeCodeConversationManager.showEmptyConversations": {
+        "claudeChats.showEmptyConversations": {
           "type": "boolean",
           "default": false,
           "description": "Show conversations that only contain warmup/sidechain messages (no actual user content)"

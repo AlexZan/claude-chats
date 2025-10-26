@@ -1,25 +1,45 @@
-# Claude Code Conversation Manager
+# Claude Chats
 
-A VS Code extension for managing Claude Code conversations, providing renaming, archiving, and organization capabilities.
+**Organize, rename, and archive your Claude Code conversations**
+
+Never lose track of your AI conversations again. Claude Chats brings powerful conversation management directly into VS Code, helping you stay organized as you work with Claude Code.
 
 ## Features
 
-- **Tree View**: Browse all active and archived conversations in a dedicated sidebar
-- **Rename Conversations**: Change conversation titles without creating ghost entries
-- **Archive Conversations**: Move conversations to archive folder (removes from active list)
-- **Restore Conversations**: Bring archived conversations back to active list
-- **Delete Conversations**: Permanently remove unwanted conversations
-- **Automatic Backup**: Creates backup files before any modification
+### 🗂️ Conversation Organization
+- **Tree View** - Browse all your Claude Code conversations in a dedicated sidebar
+- **Group by Project or Date** - Organize conversations the way you work
+- **Search & Filter** - Quickly find the conversation you need
 
-## Why This Extension?
+### ✏️ Rename Conversations
+- Give your conversations meaningful names
+- Rename directly from the tree view or command palette
+- Smart validation prevents naming conflicts
 
-The previous approach of managing conversations from inside the conversation itself was fundamentally flawed:
+### 📦 Archive & Restore
+- Archive old conversations to keep your workspace clean
+- Restore archived conversations when you need them
+- Configurable archive location
+- Optional confirmation dialogs for safety
 
-- Archive scripts would move files, but VS Code would recreate them when saving responses
-- Rename scripts created "orphaned messages" that confused VS Code's conversation detection
-- No reliable way to detect which conversation was "current"
+### 🛡️ Safe & Reliable
+- Automatic backups before any modifications
+- Non-destructive operations
+- Works with existing Claude Code conversation structure
 
-This extension solves these problems by operating at the VS Code extension level, outside the conversation context.
+### ⚡ Quick Access
+- **Command Palette** - Access all features via `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
+- **Context Menus** - Right-click conversations for quick actions
+- **Inline Actions** - Rename and archive with one click
+
+## Why Claude Chats?
+
+Working with Claude Code generates many conversations. Over time, it becomes hard to:
+- Find that conversation where you solved a specific problem
+- Keep track of which projects have active discussions
+- Clean up old or completed conversations
+
+Claude Chats solves this by providing a VS Code-native way to organize and manage all your Claude Code conversations.
 
 ## Installation
 
@@ -30,10 +50,14 @@ This extension solves these problems by operating at the VS Code extension level
 3. Run `npm run compile`
 4. Press F5 to launch Extension Development Host
 
-### From VSIX (Future)
+### From Marketplace
 
-1. Download the `.vsix` file
-2. Run `code --install-extension claude-code-conversation-manager-0.1.0.vsix`
+1. Open VS Code
+2. Go to Extensions (`Ctrl+Shift+X` or `Cmd+Shift+X`)
+3. Search for "Claude Chats"
+4. Click Install
+
+Or install directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=your-publisher-name.claude-chats)
 
 ## Usage
 
@@ -57,7 +81,11 @@ This extension solves these problems by operating at the VS Code extension level
 
 ### Archive a Conversation
 
-**From Tree View:**
+**From Tree View (Quick):**
+1. Click the 📦 Archive icon button on any conversation
+2. Choose whether to mark as done (✓ prefix)
+
+**From Tree View (Right-click):**
 1. Right-click a conversation
 2. Select "Archive"
 3. Choose whether to mark as done (✓ prefix)
@@ -79,17 +107,28 @@ This extension solves these problems by operating at the VS Code extension level
 2. Select "Delete"
 3. Confirm deletion (cannot be undone)
 
-## Settings
+## Extension Settings
 
-```json
-{
-  "claudeCodeConversationManager.archiveLocation": "~/.claude/projects/_archive",
-  "claudeCodeConversationManager.createBackups": true,
-  "claudeCodeConversationManager.confirmArchive": true,
-  "claudeCodeConversationManager.showArchivedInTree": true,
-  "claudeCodeConversationManager.groupBy": "project"
-}
-```
+This extension contributes the following settings:
+
+* `claudeChats.archiveLocation` - Location for archived conversations (default: `~/.claude/projects/_archive`)
+* `claudeChats.createBackups` - Create backup files before modifying conversations (default: `true`)
+* `claudeChats.confirmArchive` - Show confirmation dialog before archiving (default: `true`)
+* `claudeChats.showArchivedInTree` - Show archived conversations in the tree view (default: `true`)
+* `claudeChats.groupBy` - How to group conversations: `project` or `date` (default: `project`)
+* `claudeChats.showEmptyConversations` - Show conversations with no actual user content (default: `false`)
+
+## Commands
+
+* `Claude Code: Rename Current Conversation` - Rename the currently active conversation
+* `Claude Code: Archive Current Conversation` - Archive the currently active conversation
+* `Claude Code: Show Conversation Manager` - Open the conversation tree view
+* `Claude Code: Refresh Conversations` - Refresh the conversation list
+
+## Requirements
+
+- VS Code 1.95.0 or higher
+- Claude Code extension installed
 
 ## How It Works
 
@@ -114,11 +153,23 @@ This extension solves these problems by operating at the VS Code extension level
 - Handles file locks gracefully
 - Atomic operations where possible
 
-## Known Limitations
+## Known Issues
 
-- Cannot archive conversations that are currently open (by design, prevents race conditions)
-- Requires VS Code reload to see some changes in conversation list
-- Only works with Claude Code extension's `.jsonl` format
+See [GitHub Issues](https://github.com/yourusername/claude-chats/issues) for current known issues.
+
+## Release Notes
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
+
+### 0.1.0
+
+Initial release of Claude Chats:
+- Conversation tree view with project/date grouping
+- Rename conversations with validation
+- Archive and restore functionality
+- Delete conversations
+- Configurable settings
+- Automatic backups
 
 ## Troubleshooting
 
@@ -134,34 +185,14 @@ This extension solves these problems by operating at the VS Code extension level
 - Verify conversations exist in `~/.claude/projects/[project-name]/`
 - Check file permissions
 
-## Development
+## Contributing
 
-### Build
-
-```bash
-npm install
-npm run compile
-```
-
-### Run in Development
-
-1. Open project in VS Code
-2. Press F5 to launch Extension Development Host
-3. Test extension in the new window
-
-### Package
-
-```bash
-npm install -g @vscode/vsce
-vsce package
-```
+Found a bug or have a feature request? Please open an issue on [GitHub](https://github.com/yourusername/claude-chats/issues).
 
 ## License
 
-MIT
+[MIT](LICENSE)
 
-## Credits
+---
 
-Built to solve the fundamental architectural problems with managing Claude Code conversations from inside the conversation context.
-
-See [SPEC.md](SPEC.md) for detailed specification and problem analysis.
+**Enjoy using Claude Chats!** If you find this extension helpful, please consider leaving a review on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=your-publisher-name.claude-chats).

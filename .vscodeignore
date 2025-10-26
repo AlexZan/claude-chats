@@ -2,6 +2,16 @@
 .vscode-test/**
 src/**
 .gitignore
-.eslintrc.json
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/.eslintrc.json
 **/*.map
 **/*.ts
+node_modules/**
+.git/**
+.github/**
+*.vsix
+SPEC.md
+RENAME_FINDINGS.md
+tasks
