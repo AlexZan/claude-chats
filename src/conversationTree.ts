@@ -121,11 +121,12 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
 
     const conversations = FileOperations.getAllConversations(true, showEmpty);
 
-    // Group by project
-    const groupedByProject = this.groupConversationsByProject(conversations);
+    // Sort by last modified (newest first)
+    conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
 
-    return Array.from(groupedByProject.entries()).map(
-      ([project, convs]) => new ProjectTreeItem(project, convs)
+    // Return conversation items directly (no project grouping)
+    return conversations.map(
+      conv => new ConversationTreeItem(conv, vscode.TreeItemCollapsibleState.None)
     );
   }
 
@@ -141,11 +142,12 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
       return [item];
     }
 
-    // Group by project
-    const groupedByProject = this.groupConversationsByProject(conversations);
+    // Sort by last modified (newest first)
+    conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
 
-    return Array.from(groupedByProject.entries()).map(
-      ([project, convs]) => new ProjectTreeItem(project, convs)
+    // Return conversation items directly (no project grouping)
+    return conversations.map(
+      conv => new ConversationTreeItem(conv, vscode.TreeItemCollapsibleState.None)
     );
   }
 
