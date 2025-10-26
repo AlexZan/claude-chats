@@ -32,6 +32,21 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Command: Search conversations
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeCodeConversationManager.searchConversations', async () => {
+      await manager.searchConversations();
+    })
+  );
+
+  // Command: Toggle sort order
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeCodeConversationManager.toggleSortOrder', () => {
+      treeProvider.toggleSortOrder();
+      vscode.window.showInformationMessage(`Sorted by: ${treeProvider.getSortOrder()}`);
+    })
+  );
+
   // Command: Rename conversation (from tree view)
   context.subscriptions.push(
     vscode.commands.registerCommand(

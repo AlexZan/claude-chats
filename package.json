@@ -24,7 +24,13 @@
     "organize",
     "manager",
     "ai",
-    "assistant"
+    "assistant",
+    "anthropic",
+    "conversation-manager",
+    "chat-history",
+    "productivity",
+    "organization",
+    "workspace"
   ],
   "engines": {
     "vscode": "^1.95.0"
@@ -32,6 +38,18 @@
   "categories": [
     "Other"
   ],
+  "galleryBanner": {
+    "color": "#EA580C",
+    "theme": "dark"
+  },
+  "badges": [
+    {
+      "url": "https://img.shields.io/github/license/yourusername/claude-chats",
+      "href": "https://github.com/yourusername/claude-chats/blob/main/LICENSE",
+      "description": "License"
+    }
+  ],
+  "qna": "marketplace",
   "icon": "icon.svg",
   "activationEvents": [
     "onStartupFinished"
@@ -85,6 +103,16 @@
         "command": "claudeCodeConversationManager.exportToMarkdown",
         "title": "Export to Markdown",
         "icon": "$(export)"
+      },
+      {
+        "command": "claudeCodeConversationManager.searchConversations",
+        "title": "Claude Code: Search Conversations",
+        "icon": "$(search)"
+      },
+      {
+        "command": "claudeCodeConversationManager.toggleSortOrder",
+        "title": "Toggle Sort Order (Newest/Oldest)",
+        "icon": "$(sort-precedence)"
       }
     ],
     "viewsContainers": {
@@ -107,9 +135,19 @@
     "menus": {
       "view/title": [
         {
+          "command": "claudeCodeConversationManager.searchConversations",
+          "when": "view == claudeCodeConversationTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "claudeCodeConversationManager.toggleSortOrder",
+          "when": "view == claudeCodeConversationTree",
+          "group": "navigation@2"
+        },
+        {
           "command": "claudeCodeConversationManager.refreshConversations",
           "when": "view == claudeCodeConversationTree",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

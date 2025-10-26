@@ -158,6 +158,47 @@ export class ConversationManager {
   }
 
   /**
+   * Search conversations (full-text search)
+   */
+  async searchConversations(): Promise<void> {
+    const query = await vscode.window.showInputBox({
+      prompt: 'Search conversations (searches both titles and content)',
+      placeHolder: 'Enter search query...'
+    });
+
+    if (!query || !query.trim()) {
+      return;
+    }
+
+    const results = FileOperations.searchConversations(query.trim());
+
+    if (results.length === 0) {
+      vscode.window.showInformationMessage(`No conversations found matching "${query}"`);
+      return;
+    }
+
+    // Show results in quick pick
+    const items = results.map(result => ({
+      label: result.conversation.title,
+      description: result.conversation.isArchived ? '📦 Archived' : '',
+      detail: result.matches.join('\n'),
+      conversation: result.conversation
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: `Found ${results.length} conversation(s) matching "${query}"`,
+      matchOnDescription: true,
+      matchOnDetail: true
+    });
+
+    if (selected) {
+      // Open the conversation file
+      const doc = await vscode.workspace.openTextDocument(selected.conversation.filePath);
+      await vscode.window.showTextDocument(doc);
+    }
+  }
+
+  /**
    * Export conversation to markdown
    */
   async exportToMarkdown(conversation: Conversation): Promise<void> {

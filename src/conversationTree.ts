@@ -79,7 +79,18 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> =
     this._onDidChangeTreeData.event;
 
+  private sortOrder: 'newest' | 'oldest' = 'newest';
+
   constructor() {}
+
+  toggleSortOrder(): void {
+    this.sortOrder = this.sortOrder === 'newest' ? 'oldest' : 'newest';
+    this.refresh();
+  }
+
+  getSortOrder(): string {
+    return this.sortOrder === 'newest' ? 'Newest First' : 'Oldest First';
+  }
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
@@ -121,8 +132,12 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
 
     const conversations = FileOperations.getAllConversations(true, showEmpty);
 
-    // Sort by last modified (newest first)
-    conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+    // Sort by last modified based on sort order
+    if (this.sortOrder === 'newest') {
+      conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+    } else {
+      conversations.sort((a, b) => a.lastModified.getTime() - b.lastModified.getTime());
+    }
 
     // Return conversation items directly (no project grouping)
     return conversations.map(
@@ -142,8 +157,12 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
       return [item];
     }
 
-    // Sort by last modified (newest first)
-    conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+    // Sort by last modified based on sort order
+    if (this.sortOrder === 'newest') {
+      conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+    } else {
+      conversations.sort((a, b) => a.lastModified.getTime() - b.lastModified.getTime());
+    }
 
     // Return conversation items directly (no project grouping)
     return conversations.map(

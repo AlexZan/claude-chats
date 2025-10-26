@@ -419,6 +419,79 @@ export class FileOperations {
   }
 
   /**
+   * Search conversations by content (full-text search)
+   */
+  static searchConversations(query: string, includeArchived: boolean = true): Array<{conversation: Conversation, matches: string[]}> {
+    const results: Array<{conversation: Conversation, matches: string[]}> = [];
+    const lowerQuery = query.toLowerCase();
+
+    // Get all conversations
+    const conversations = [
+      ...FileOperations.getAllConversations(true, true),
+      ...(includeArchived ? FileOperations.getArchivedConversations(true, true) : [])
+    ];
+
+    for (const conversation of conversations) {
+      const matches: string[] = [];
+
+      // Check title
+      if (conversation.title.toLowerCase().includes(lowerQuery)) {
+        matches.push(`Title: ${conversation.title}`);
+      }
+
+      // Search content
+      try {
+        const messages = FileOperations.parseConversation(conversation.filePath);
+
+        for (const message of messages) {
+          // Skip metadata and sidechain
+          if ('_metadata' in message || message.isSidechain) {
+            continue;
+          }
+
+          const content = message.message.content;
+          let textContent = '';
+
+          if (typeof content === 'string') {
+            textContent = content;
+          } else if (Array.isArray(content)) {
+            for (const item of content) {
+              if (item.type === 'text' && item.text) {
+                textContent += item.text + ' ';
+              }
+            }
+          }
+
+          if (textContent.toLowerCase().includes(lowerQuery)) {
+            // Extract snippet around match
+            const lowerText = textContent.toLowerCase();
+            const matchIndex = lowerText.indexOf(lowerQuery);
+            const start = Math.max(0, matchIndex - 50);
+            const end = Math.min(textContent.length, matchIndex + query.length + 50);
+            let snippet = textContent.substring(start, end);
+
+            if (start > 0) snippet = '...' + snippet;
+            if (end < textContent.length) snippet = snippet + '...';
+
+            matches.push(`${message.type === 'user' ? '👤' : '🤖'}: ${snippet}`);
+
+            // Limit matches per conversation
+            if (matches.length >= 5) break;
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to search conversation ${conversation.filePath}:`, error);
+      }
+
+      if (matches.length > 0) {
+        results.push({ conversation, matches });
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Export conversation to markdown format
    */
   static exportToMarkdown(filePath: string): string {
