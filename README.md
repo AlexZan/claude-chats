@@ -1,32 +1,16 @@
 # Claude Chats
 
-**Organize, rename, and archive your Claude Code conversations**
+> **Looking to rename Claude Code conversations? You found it!**
+> This is the **first and only extension** that truly renames Claude Code conversations.
 
-Never lose track of your AI conversations again. Claude Chats brings powerful conversation management directly into VS Code, helping you stay organized as you work with Claude Code.
+**Tired of generic conversation titles?** Claude Chats actually modifies the underlying `.jsonl` data - not just display names. Your renamed conversations persist in Claude Code itself, everywhere they appear.
 
-## ⚠️ Legal Disclaimer
+## What Makes This Different?
 
-**USE AT YOUR OWN RISK**
-
-This extension directly modifies Claude Code conversation files (`.jsonl` format). While we take precautions:
-
-- ✅ **Automatic backups** are created before any modification (`.jsonl.backup` files)
-- ✅ Backups can be disabled in settings if desired
-- ⚠️ **This is a hacky solution** - we're directly editing conversation files
-- ⚠️ We try our best to stay compatible with Claude Code's format
-- ⚠️ **No guarantees** if Anthropic makes breaking changes to the file format
-- ⚠️ The extension may stop working after Claude Code updates
-
-**Why this approach?**
-This extension provides rename and management capabilities that Claude Code doesn't officially support yet. It's a workaround until Anthropic decides to add these features officially.
-
-**Recommendations:**
-- Keep backups enabled (default)
-- Don't modify conversations that are currently open
-- Test on non-critical conversations first
-- Keep your `.jsonl.backup` files safe
-
-By using this extension, you accept that you are responsible for any data loss or corruption that may occur.
+🎯 **True Data Modification** - Edits the actual `.jsonl` files, not cosmetic UI changes
+🎯 **Persists in Claude Code** - Renamed conversations show everywhere in VS Code
+🎯 **First-of-its-kind** - No other extension modifies Claude Code conversation data
+🎯 **Plus Full Management** - Archive, organize, and delete conversations too
 
 ## Features
 
@@ -35,10 +19,13 @@ By using this extension, you accept that you are responsible for any data loss o
 - **Group by Project or Date** - Organize conversations the way you work
 - **Search & Filter** - Quickly find the conversation you need
 
-### ✏️ Rename Conversations
-- Give your conversations meaningful names
-- Rename directly from the tree view or command palette
+### ✏️ True Conversation Renaming
+- **Actually modifies the conversation data** - not just a display name in this extension
+- Changes persist in Claude Code's native interface
+- Renames appear everywhere: sidebar, conversation history, recent files
+- Works by editing the first user message in the `.jsonl` file (Claude Code's title source)
 - Smart validation prevents naming conflicts
+- Rename directly from tree view or command palette
 
 ### 📦 Archive & Restore
 - Archive old conversations to keep your workspace clean
@@ -58,12 +45,22 @@ By using this extension, you accept that you are responsible for any data loss o
 
 ## Why Claude Chats?
 
-Working with Claude Code generates many conversations. Over time, it becomes hard to:
+### The Problem
+Working with Claude Code generates many conversations, but Claude Code doesn't provide built-in tools to:
+- **Rename conversations** - they all show as generic titles based on first message
 - Find that conversation where you solved a specific problem
 - Keep track of which projects have active discussions
 - Clean up old or completed conversations
 
-Claude Chats solves this by providing a VS Code-native way to organize and manage all your Claude Code conversations.
+### The Solution
+**Claude Chats is the first and only extension that truly renames Claude Code conversations.** Unlike other tools that only change display names in their own UI, Claude Chats:
+
+✅ **Modifies actual conversation data** in Claude Code's `.jsonl` files
+✅ **Changes persist in Claude Code** - not just in this extension
+✅ **Works everywhere** - renamed conversations show with new titles throughout VS Code
+✅ **Plus archiving and organization** - complete conversation management
+
+This is the real deal - actual data modification, not cosmetic changes.
 
 ## Installation
 
@@ -166,14 +163,24 @@ This extension contributes the following settings:
 - VS Code 1.95.0 or higher
 - Claude Code extension installed
 
-## How It Works
+## How It Works (Technical Details)
 
-### Rename Implementation
+### True Rename - Not Just Display Names
 
-- Modifies the first user message directly in the `.jsonl` file
-- No orphaned messages or `parentUuid: null` tricks
-- Creates backup before modification
-- Updates VS Code's conversation cache automatically
+**Important:** This extension modifies the actual `.jsonl` conversation files that Claude Code uses. When you rename a conversation:
+
+1. **Reads the `.jsonl` file** - Your conversation data in Claude Code's format
+2. **Finds the first user message** - Claude Code uses this as the conversation title
+3. **Modifies the message content** - Changes the actual data
+4. **Writes back to the file** - Updates the `.jsonl` file
+5. **Creates automatic backup** - Saves `.jsonl.backup` before any changes
+
+**This means:**
+- ✅ Renames persist in Claude Code's native interface
+- ✅ Changes appear in Claude Code's conversation list
+- ✅ New titles show everywhere VS Code displays the conversation
+- ✅ No orphaned messages or hacks - clean data modification
+- ⚠️ This is a workaround until Anthropic adds official rename support
 
 ### Archive Implementation
 
@@ -224,6 +231,10 @@ Initial release of Claude Chats:
 ## Contributing
 
 Found a bug or have a feature request? Please open an issue on [GitHub](https://github.com/yourusername/claude-chats/issues).
+
+## Disclaimer
+
+This extension modifies Claude Code conversation files (`.jsonl` format) to provide rename functionality. Automatic backups are created before modifications. This is an unofficial workaround until Anthropic adds native rename support. Use at your own risk - you are responsible for your data.
 
 ## License
 

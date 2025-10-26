@@ -6,7 +6,10 @@
       "Read(//c/Users/Lex/.claude/skills/**)",
       "Bash(for file in ~/.claude/projects/c--Users-Lex-bot-testa/*.backup)",
       "Bash(do cp \"$file\" \"$file%.backup\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(npx vsce:*)",
+      "Bash(magick:*)",
+      "Bash(convert:*)"
     ],
     "deny": [],
     "ask": []

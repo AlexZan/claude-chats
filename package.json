@@ -1,23 +1,26 @@
 {
   "name": "claude-chats",
   "displayName": "Claude Chats",
-  "description": "Organize, rename, and archive your Claude Code conversations",
+  "description": "Rename, organize, and archive Claude Code conversations - modifies actual conversation data, not just display names",
   "version": "0.1.0",
-  "publisher": "your-publisher-name",
+  "publisher": "AlexZan",
   "author": {
     "name": "Alexander Zanfir"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/claude-chats"
+    "url": "https://github.com/AlexZan/claude-chats"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/claude-chats/issues"
+    "url": "https://github.com/AlexZan/claude-chats/issues"
   },
   "keywords": [
     "claude",
     "claude-code",
+    "rename",
+    "rename-conversation",
+    "rename-chat",
     "conversation",
     "chat",
     "archive",
@@ -30,7 +33,8 @@
     "chat-history",
     "productivity",
     "organization",
-    "workspace"
+    "workspace",
+    "jsonl"
   ],
   "engines": {
     "vscode": "^1.95.0"
@@ -50,7 +54,7 @@
     }
   ],
   "qna": "marketplace",
-  "icon": "icon.svg",
+  "icon": "icon.png",
   "activationEvents": [
     "onStartupFinished"
   ],
