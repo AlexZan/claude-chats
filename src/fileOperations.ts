@@ -31,11 +31,13 @@ export class FileOperations {
    * Get the first meaningful user message (the title)
    * Tries to find real (non-sidechain) messages first
    * Falls back to warmup/sidechain messages if no real messages exist
+   * For warmup-only conversations, prefers assistant response over "Warmup" text
    */
   static getFirstUserMessage(filePath: string): ConversationMessage | null {
     const messages = FileOperations.parseConversation(filePath);
     let firstUserMessage: ConversationMessage | null = null;
-    let firstSidechainMessage: ConversationMessage | null = null;
+    let firstSidechainAssistantMessage: ConversationMessage | null = null;
+    let firstSidechainUserMessage: ConversationMessage | null = null;
 
     for (const message of messages) {
       // Skip metadata
@@ -74,8 +76,21 @@ export class FileOperations {
 
       // Handle sidechain (warmup) messages separately - use as fallback only
       if (message.isSidechain) {
-        if (!firstSidechainMessage) {
-          firstSidechainMessage = message;
+        // Skip "Warmup" text specifically - it's the trigger, not content
+        if (text.trim() === 'Warmup') {
+          if (!firstSidechainUserMessage) {
+            firstSidechainUserMessage = message;
+          }
+          continue;
+        }
+
+        // Prefer assistant responses (actual initialization message)
+        if (message.type === 'assistant' && !firstSidechainAssistantMessage) {
+          firstSidechainAssistantMessage = message;
+        }
+        // Fallback to non-Warmup sidechain user messages
+        if (message.type === 'user' && !firstSidechainUserMessage) {
+          firstSidechainUserMessage = message;
         }
         continue;
       }
@@ -96,9 +111,14 @@ export class FileOperations {
       return firstUserMessage;
     }
 
-    // Last resort: use first sidechain message (warmup)
-    if (firstSidechainMessage) {
-      return firstSidechainMessage;
+    // For warmup-only conversations, prefer assistant response over "Warmup" text
+    if (firstSidechainAssistantMessage) {
+      return firstSidechainAssistantMessage;
+    }
+
+    // Last resort: use non-Warmup sidechain user message
+    if (firstSidechainUserMessage) {
+      return firstSidechainUserMessage;
     }
 
     return null;
