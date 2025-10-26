@@ -9,7 +9,15 @@
       "Bash(done)",
       "Bash(npx vsce:*)",
       "Bash(magick:*)",
-      "Bash(convert:*)"
+      "Bash(convert:*)",
+      "Bash(for f in ~/.claude/projects/d--Dev-AgentRoundTableCLI/*.jsonl)",
+      "Bash(do)",
+      "Bash(if ! grep -q '\"\"isSidechain\"\":true' \"$f\")",
+      "Bash(then)",
+      "Bash(__NEW_LINE__ head -1 \"$f\")",
+      "Bash(__NEW_LINE__ break)",
+      "Bash(__NEW_LINE__ fi)",
+      "Bash(__NEW_LINE__ done)"
     ],
     "deny": [],
     "ask": []

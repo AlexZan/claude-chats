@@ -29,11 +29,13 @@ export class FileOperations {
 
   /**
    * Get the first meaningful user message (the title)
-   * Skips warmup, sidechain, and system metadata messages
+   * Tries to find real (non-sidechain) messages first
+   * Falls back to warmup/sidechain messages if no real messages exist
    */
   static getFirstUserMessage(filePath: string): ConversationMessage | null {
     const messages = FileOperations.parseConversation(filePath);
     let firstUserMessage: ConversationMessage | null = null;
+    let firstSidechainMessage: ConversationMessage | null = null;
 
     for (const message of messages) {
       // Skip metadata
@@ -41,12 +43,6 @@ export class FileOperations {
         continue;
       }
 
-      // Skip sidechain messages
-      if (message.isSidechain) {
-        continue;
-      }
-
-      // Look at any message (user or assistant)
       // Skip if no message content
       if (!message.message || !message.message.content) {
         continue;
@@ -76,7 +72,15 @@ export class FileOperations {
         continue;
       }
 
-      // Found a real message!
+      // Handle sidechain (warmup) messages separately - use as fallback only
+      if (message.isSidechain) {
+        if (!firstSidechainMessage) {
+          firstSidechainMessage = message;
+        }
+        continue;
+      }
+
+      // Found a real (non-sidechain) message!
       // For renamed conversations, the first user message is the title
       // For others, return the first real message we find
       if (message.type === 'user' && !firstUserMessage) {
@@ -87,30 +91,40 @@ export class FileOperations {
       return message;
     }
 
-    return firstUserMessage;
+    // Fallback to first user message (could be from renamed conversation)
+    if (firstUserMessage) {
+      return firstUserMessage;
+    }
+
+    // Last resort: use first sidechain message (warmup)
+    if (firstSidechainMessage) {
+      return firstSidechainMessage;
+    }
+
+    return null;
   }
 
   /**
-   * Check if conversation has any real user messages (not just warmup/sidechain/system)
+   * Check if conversation has any content (including sidechain/warmup messages)
+   * This allows warmup-only conversations to be displayed (matching Claude Code behavior)
    */
   static hasRealMessages(filePath: string): boolean {
     try {
       const messages = FileOperations.parseConversation(filePath);
 
-      // Look for any non-sidechain, non-system message
+      // Look for ANY non-system message, including sidechain (warmup)
       for (const message of messages) {
         // Skip metadata
         if ('_metadata' in message) {
           continue;
         }
 
-        // Skip sidechain messages (warmup, etc.)
-        if (message.isSidechain) {
+        // Get content
+        const content = message.message?.content;
+        if (!content) {
           continue;
         }
 
-        // Get content
-        const content = message.message.content;
         let text = '';
 
         if (typeof content === 'string') {
@@ -128,7 +142,7 @@ export class FileOperations {
           continue;
         }
 
-        // Found a real message!
+        // Found a message (real or warmup)
         return true;
       }
 
