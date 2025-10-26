@@ -24,7 +24,7 @@ export class ConversationManager {
   /**
    * Archive a conversation
    */
-  async archive(conversation: Conversation, markDone: boolean = false): Promise<void> {
+  async archive(conversation: Conversation): Promise<void> {
     try {
       // Check if conversation file is currently open
       const isOpen = vscode.workspace.textDocuments.some(
@@ -48,9 +48,8 @@ export class ConversationManager {
       const confirmArchive = config.get<boolean>('confirmArchive', true);
 
       if (confirmArchive) {
-        const title = markDone ? `✓ ${conversation.title}` : conversation.title;
         const action = await vscode.window.showInformationMessage(
-          `Archive conversation "${title}"?`,
+          `Archive conversation "${conversation.title}"?`,
           'Archive',
           'Cancel'
         );
@@ -60,7 +59,7 @@ export class ConversationManager {
         }
       }
 
-      FileOperations.archiveConversation(conversation.filePath, conversation.project, markDone);
+      FileOperations.archiveConversation(conversation.filePath, conversation.project);
       vscode.window.showInformationMessage(
         `Archived conversation: ${conversation.title}`
       );
@@ -81,6 +80,32 @@ export class ConversationManager {
       );
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to restore conversation: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Toggle done status (✓ prefix)
+   */
+  async toggleDone(conversation: Conversation): Promise<void> {
+    try {
+      const isDone = conversation.title.startsWith('✓');
+      let newTitle: string;
+
+      if (isDone) {
+        // Remove ✓ prefix
+        newTitle = conversation.title.replace(/^✓\s*/, '');
+      } else {
+        // Add ✓ prefix
+        newTitle = `✓ ${conversation.title}`;
+      }
+
+      FileOperations.updateFirstUserMessage(conversation.filePath, newTitle);
+      vscode.window.showInformationMessage(
+        isDone ? `Marked as undone: ${newTitle}` : `Marked as done: ${newTitle}`
+      );
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to toggle done status: ${error}`);
       throw error;
     }
   }

@@ -109,19 +109,7 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        const markDone = await vscode.window.showQuickPick(
-          [
-            { label: 'Archive', description: 'Archive without marking done', value: false },
-            { label: 'Archive and mark done', description: 'Add ✓ prefix before archiving', value: true }
-          ],
-          { placeHolder: 'How would you like to archive this conversation?' }
-        );
-
-        if (markDone === undefined) {
-          return;
-        }
-
-        await manager.archive(item.conversation, markDone.value);
+        await manager.archive(item.conversation);
         treeProvider.refresh();
       }
     )
@@ -150,19 +138,7 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        const markDone = await vscode.window.showQuickPick(
-          [
-            { label: 'Archive', description: 'Archive without marking done', value: false },
-            { label: 'Archive and mark done', description: 'Add ✓ prefix before archiving', value: true }
-          ],
-          { placeHolder: 'How would you like to archive this conversation?' }
-        );
-
-        if (markDone === undefined) {
-          return;
-        }
-
-        await manager.archive(conversation, markDone.value);
+        await manager.archive(conversation);
         treeProvider.refresh();
       }
     )
@@ -178,6 +154,21 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         await manager.restore(item.conversation);
+        treeProvider.refresh();
+      }
+    )
+  );
+
+  // Command: Toggle done status
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'claudeCodeConversationManager.toggleDone',
+      async (item: ConversationTreeItem) => {
+        if (!(item instanceof ConversationTreeItem)) {
+          return;
+        }
+
+        await manager.toggleDone(item.conversation);
         treeProvider.refresh();
       }
     )

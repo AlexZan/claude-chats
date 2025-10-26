@@ -372,18 +372,10 @@ export class FileOperations {
   /**
    * Move conversation to archive
    */
-  static archiveConversation(filePath: string, projectName: string, markDone: boolean = false): void {
+  static archiveConversation(filePath: string, projectName: string): void {
     // Create backup first
     if (this.shouldCreateBackup()) {
       fs.copyFileSync(filePath, `${filePath}.backup`);
-    }
-
-    // Mark as done if requested
-    if (markDone) {
-      const title = FileOperations.getConversationTitle(filePath);
-      if (!title.startsWith('✓')) {
-        FileOperations.updateFirstUserMessage(filePath, `✓ ${title}`);
-      }
     }
 
     // Create archive directory

@@ -79,16 +79,28 @@ Or install directly from the [VS Code Marketplace](https://marketplace.visualstu
 2. Press `Ctrl+Shift+P`
 3. Run "Claude Code: Rename Current Conversation"
 
+### Mark as Done/Undone
+
+**From Tree View (Quick):**
+1. Click the ✓ Toggle Done icon button on any conversation
+2. Adds or removes ✓ prefix to track completed conversations
+
+**From Tree View (Right-click):**
+1. Right-click a conversation
+2. Select "Toggle Done"
+
+This marks conversations as complete without archiving them, useful for keeping finished chats accessible.
+
 ### Archive a Conversation
 
 **From Tree View (Quick):**
 1. Click the 📦 Archive icon button on any conversation
-2. Choose whether to mark as done (✓ prefix)
+2. Confirm archive
 
 **From Tree View (Right-click):**
 1. Right-click a conversation
 2. Select "Archive"
-3. Choose whether to mark as done (✓ prefix)
+3. Confirm archive
 
 **From Command Palette:**
 1. Open a `.jsonl` conversation file
