@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Lex/.claude/projects/**)",
+      "Read(//c/Users/Lex/.claude/skills/chat-history-manager/**)",
+      "Read(//c/Users/Lex/.claude/skills/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "name": "claude-code-conversation-manager",
+  "displayName": "Claude Code Conversation Manager",
+  "description": "Manage, rename, archive, and organize Claude Code conversations",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeCodeConversationManager.renameCurrentConversation",
+        "title": "Claude Code: Rename Current Conversation"
+      },
+      {
+        "command": "claudeCodeConversationManager.archiveCurrentConversation",
+        "title": "Claude Code: Archive Current Conversation"
+      },
+      {
+        "command": "claudeCodeConversationManager.showConversationManager",
+        "title": "Claude Code: Show Conversation Manager"
+      },
+      {
+        "command": "claudeCodeConversationManager.refreshConversations",
+        "title": "Claude Code: Refresh Conversations",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "claudeCodeConversationManager.renameConversation",
+        "title": "Rename",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "claudeCodeConversationManager.archiveConversation",
+        "title": "Archive",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "claudeCodeConversationManager.restoreConversation",
+        "title": "Restore",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "claudeCodeConversationManager.deleteConversation",
+        "title": "Delete",
+        "icon": "$(trash)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claudeCodeConversations",
+          "title": "Claude Conversations",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "claudeCodeConversations": [
+        {
+          "id": "claudeCodeConversationTree",
+          "name": "Conversations"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "claudeCodeConversationManager.refreshConversations",
+          "when": "view == claudeCodeConversationTree",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "claudeCodeConversationManager.renameConversation",
+          "when": "view == claudeCodeConversationTree && viewItem == conversation",
+          "group": "inline@1"
+        },
+        {
+          "command": "claudeCodeConversationManager.archiveConversation",
+          "when": "view == claudeCodeConversationTree && viewItem == conversation",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "claudeCodeConversationManager.deleteConversation",
+          "when": "view == claudeCodeConversationTree && viewItem == conversation",
+          "group": "2_danger@1"
+        },
+        {
+          "command": "claudeCodeConversationManager.restoreConversation",
+          "when": "view == claudeCodeConversationTree && viewItem == archivedConversation",
+          "group": "1_actions@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Claude Code Conversation Manager",
+      "properties": {
+        "claudeCodeConversationManager.archiveLocation": {
+          "type": "string",
+          "default": "~/.claude/projects/_archive",
+          "description": "Location for archived conversations"
+        },
+        "claudeCodeConversationManager.createBackups": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create backup files before modifying conversations"
+        },
+        "claudeCodeConversationManager.confirmArchive": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show confirmation dialog before archiving"
+        },
+        "claudeCodeConversationManager.showArchivedInTree": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show archived conversations in the tree view"
+        },
+        "claudeCodeConversationManager.groupBy": {
+          "type": "string",
+          "enum": [
+            "project",
+            "date"
+          ],
+          "default": "project",
+          "description": "How to group conversations in the tree view"
+        },
+        "claudeCodeConversationManager.showEmptyConversations": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show conversations that only contain warmup/sidechain messages (no actual user content)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.95.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.3.0"
+  }
+}

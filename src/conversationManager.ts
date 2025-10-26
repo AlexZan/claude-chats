@@ -1,0 +1,146 @@
+import * as vscode from 'vscode';
+import { FileOperations } from './fileOperations';
+import { Conversation } from './types';
+
+/**
+ * Core business logic for managing conversations
+ */
+export class ConversationManager {
+  constructor(private readonly context: vscode.ExtensionContext) {}
+
+  /**
+   * Rename a conversation
+   */
+  async rename(conversation: Conversation, newTitle: string): Promise<void> {
+    try {
+      FileOperations.updateFirstUserMessage(conversation.filePath, newTitle);
+      vscode.window.showInformationMessage(`Renamed conversation to: ${newTitle}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to rename conversation: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Archive a conversation
+   */
+  async archive(conversation: Conversation, markDone: boolean = false): Promise<void> {
+    try {
+      // Check if conversation file is currently open
+      const isOpen = vscode.workspace.textDocuments.some(
+        doc => doc.fileName === conversation.filePath
+      );
+
+      if (isOpen) {
+        const proceed = await vscode.window.showWarningMessage(
+          'This conversation file is currently open. Archiving may cause unexpected behavior. Continue?',
+          'Archive Anyway',
+          'Cancel'
+        );
+
+        if (proceed !== 'Archive Anyway') {
+          return;
+        }
+      }
+
+      // Confirm if setting is enabled
+      const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
+      const confirmArchive = config.get<boolean>('confirmArchive', true);
+
+      if (confirmArchive) {
+        const title = markDone ? `✓ ${conversation.title}` : conversation.title;
+        const action = await vscode.window.showInformationMessage(
+          `Archive conversation "${title}"?`,
+          'Archive',
+          'Cancel'
+        );
+
+        if (action !== 'Archive') {
+          return;
+        }
+      }
+
+      FileOperations.archiveConversation(conversation.filePath, conversation.project, markDone);
+      vscode.window.showInformationMessage(
+        `Archived conversation: ${conversation.title}`
+      );
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to archive conversation: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore a conversation from archive
+   */
+  async restore(conversation: Conversation): Promise<void> {
+    try {
+      FileOperations.restoreConversation(conversation.filePath, conversation.project);
+      vscode.window.showInformationMessage(
+        `Restored conversation: ${conversation.title}`
+      );
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to restore conversation: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a conversation permanently
+   */
+  async delete(conversation: Conversation): Promise<void> {
+    try {
+      const action = await vscode.window.showWarningMessage(
+        `Permanently delete conversation "${conversation.title}"? This cannot be undone.`,
+        { modal: true },
+        'Delete',
+        'Cancel'
+      );
+
+      if (action !== 'Delete') {
+        return;
+      }
+
+      FileOperations.deleteConversation(conversation.filePath);
+      vscode.window.showInformationMessage(
+        `Deleted conversation: ${conversation.title}`
+      );
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to delete conversation: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current conversation ID (from active editor if it's a .jsonl file)
+   */
+  getCurrentConversationId(): string | null {
+    const activeEditor = vscode.window.activeTextEditor;
+
+    if (!activeEditor) {
+      return null;
+    }
+
+    const filePath = activeEditor.document.fileName;
+
+    if (!filePath.endsWith('.jsonl')) {
+      return null;
+    }
+
+    // Extract conversation ID from filename
+    const fileName = filePath.split(/[/\\]/).pop();
+    return fileName ? fileName.replace('.jsonl', '') : null;
+  }
+
+  /**
+   * Find conversation by ID
+   */
+  findConversationById(conversationId: string): Conversation | null {
+    const allConversations = [
+      ...FileOperations.getAllConversations(),
+      ...FileOperations.getArchivedConversations()
+    ];
+
+    return allConversations.find(c => c.id === conversationId) || null;
+  }
+}
