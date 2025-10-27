@@ -170,7 +170,20 @@ export class ConversationManager {
       return;
     }
 
-    const results = FileOperations.searchConversations(query.trim());
+    // Show progress indicator while searching
+    const results = await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: `Searching conversations for "${query.trim()}"...`,
+      cancellable: false
+    }, async (progress) => {
+      try {
+        return FileOperations.searchConversations(query.trim());
+      } catch (error) {
+        console.error('[SearchConversations] Error during search:', error);
+        vscode.window.showErrorMessage(`Search failed: ${error}`);
+        return [];
+      }
+    });
 
     if (results.length === 0) {
       vscode.window.showInformationMessage(`No conversations found matching "${query}"`);

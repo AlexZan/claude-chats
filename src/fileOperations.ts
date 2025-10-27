@@ -1016,14 +1016,14 @@ export class FileOperations {
   /**
    * Search conversations by content (full-text search)
    */
-  static searchConversations(query: string, includeArchived: boolean = true): Array<{conversation: Conversation, matches: string[]}> {
+  static searchConversations(query: string, includeArchived: boolean = true, filterToCurrentProject: boolean = true): Array<{conversation: Conversation, matches: string[]}> {
     const results: Array<{conversation: Conversation, matches: string[]}> = [];
     const lowerQuery = query.toLowerCase();
 
-    // Get all conversations (search across ALL projects, not just current)
+    // Get conversations (defaults to current project only)
     const conversations = [
-      ...FileOperations.getAllConversations(false, true),
-      ...(includeArchived ? FileOperations.getArchivedConversations(false, true) : [])
+      ...FileOperations.getAllConversations(filterToCurrentProject, true),
+      ...(includeArchived ? FileOperations.getArchivedConversations(filterToCurrentProject, true) : [])
     ];
 
     for (const conversation of conversations) {
