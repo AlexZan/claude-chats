@@ -410,6 +410,56 @@ When implementing conversation renaming:
 
 This is the **preferred method** for implementing conversation renaming in our extension. It's cleaner, safer, and more aligned with Claude Code's internal structure than modifying first user message content.
 
+### 8. Failed/Legacy Rename Approaches
+
+Before discovering summary-based renaming, we explored several approaches that either failed or had significant drawbacks. Documented here to prevent repeating these mistakes.
+
+**❌ FAILED: Orphaned Message Insertion**
+
+Early attempts tried inserting new messages with `parentUuid: null` (orphaned messages) to change the title.
+
+**Why it failed:**
+- Claude Code conversation files use a tree structure where each message links to its parent via `parentUuid`
+- Inserting orphaned messages (`parentUuid: null`) in the middle of a conversation breaks the chain
+- VS Code loses track of conversation structure, resulting in:
+  - "No prompt" ghost entries in conversation list
+  - Conversations disappearing from the list
+  - Duplicate conversation entries
+  - Broken conversation tree display
+
+**Example of broken structure:**
+```json
+{"uuid": "a", "parentUuid": null, "isSidechain": true}        // Warmup (OK)
+{"uuid": "b", "parentUuid": "a"}                              // Assistant warmup
+{"uuid": "c", "parentUuid": "b", "content": "Original msg"}   // First user message
+{"uuid": "d", "parentUuid": null, "content": "New Title"}     // ❌ ORPHANED - Breaks VS Code
+```
+
+**⚠️ LEGACY: First User Message Modification**
+
+The working fallback approach before summary discovery was to modify the first non-sidechain user message content directly.
+
+**How it works:**
+```python
+# Find first non-sidechain user message
+if data.get('type') == 'user' and data.get('isSidechain') == False:
+    data['message']['content'] = new_title  # Replace content
+    # Keep all UUIDs and parentUuid intact
+```
+
+**Pros:**
+- Works reliably - no VS Code confusion
+- Simple implementation
+- No UUID generation or chain updates needed
+
+**Cons:**
+- ❌ **Loses original first message content**
+- User can't see what they originally asked
+- Conversation context is lost
+- Not ideal for long, detailed first messages
+
+**Status:** This approach is now considered legacy. Use summary-based renaming instead, which preserves all conversation content while still allowing custom titles.
+
 ## Open Questions
 
 1. **Why do conversations fork into separate session files?**
