@@ -356,23 +356,13 @@ export class FileOperations {
   /**
    * Get conversation title from file
    * Priority:
-   * 1. Cross-file summary (leafUuid pointing to this file's messages)
-   * 2. Local summary (in this file)
+   * 1. Local summary (in this file) - takes precedence for renamed conversations
+   * 2. Cross-file summary (leafUuid pointing to this file's messages)
    * 3. First user message
    * This matches Claude Code's title display behavior
    */
   static getConversationTitle(filePath: string): string {
-    // Priority 1: Check for cross-file summary (leafUuid mechanism)
-    try {
-      const crossFileSummary = FileOperations.findCrossFileSummary(filePath);
-      if (crossFileSummary) {
-        return crossFileSummary;
-      }
-    } catch (error) {
-      console.log('[FileOperations] Error checking cross-file summary:', error);
-    }
-
-    // Priority 2: Check for local summary field
+    // Priority 1: Check for LOCAL summary field first (takes precedence over cross-file)
     try {
       const messages = FileOperations.parseConversation(filePath);
 
@@ -408,6 +398,16 @@ export class FileOperations {
       }
     } catch (error) {
       console.log('[FileOperations] Error checking for summary:', error);
+    }
+
+    // Priority 2: Check for cross-file summary (leafUuid mechanism)
+    try {
+      const crossFileSummary = FileOperations.findCrossFileSummary(filePath);
+      if (crossFileSummary) {
+        return crossFileSummary;
+      }
+    } catch (error) {
+      console.log('[FileOperations] Error checking cross-file summary:', error);
     }
 
     // Priority 3: Fallback to first user message
