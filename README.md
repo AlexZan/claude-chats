@@ -10,7 +10,19 @@
 🎯 **True Data Modification** - Edits the actual `.jsonl` files, not cosmetic UI changes
 🎯 **Persists in Claude Code** - Renamed conversations show everywhere in VS Code
 🎯 **First-of-its-kind** - No other extension modifies Claude Code conversation data
+🎯 **Pixel-Perfect Matching** - Conversations display exactly like Claude Code (same titles, timestamps, sorting)
 🎯 **Plus Full Management** - Archive, organize, and delete conversations too
+
+## Recent Improvements (v0.2.0)
+
+After weeks of reverse-engineering Claude Code's undocumented `.jsonl` format, we've achieved perfect parity with Claude Code's native conversation display:
+
+✨ **Accurate Timestamps** - Shows exact same relative times (Today, Yesterday, Past week, etc.)
+✨ **Perfect Sorting** - Conversations appear in identical order to Claude Code's list
+✨ **Smart Title Extraction** - Matches Claude Code's title priority system exactly
+✨ **Clickable Conversations** - Click any conversation to open it directly in Claude Code
+
+The journey was challenging - the format uses complex cross-file references, warmup messages, and subtle timestamp behaviors. Through careful analysis and pixel-by-pixel comparison, we cracked it. While Anthropic works on native features like conversation renaming, Claude Chats delivers these essential tools today.
 
 ## Features
 

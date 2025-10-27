@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-10-27
+
+### The Journey
+
+This release represents weeks of reverse-engineering Claude Code's conversation file format. When Anthropic announced they were working on features like "rename conversations," we couldn't wait - these are essential quality-of-life features that users need now. So we dove deep into the undocumented `.jsonl` format to figure out how Claude Code actually works.
+
+The journey was challenging. The conversation files use a complex format with cross-file references, warmup messages, sidechain reconnections, and subtle timestamp behaviors that weren't immediately obvious. Through careful analysis of hundreds of conversation files, manual testing, and comparing our output against Claude Code's behavior pixel by pixel, we finally cracked it.
+
+### Added
+
+- **Clickable Conversations**: Click any conversation in the tree to open it in Claude Code
+- **Accurate Timestamps**: Conversations now show the exact same relative times as Claude Code (Today, Yesterday, Past week, etc.)
+- **Perfect Sorting**: Conversations are sorted exactly like Claude Code's list
+  - Discovered that Claude Code uses the last non-sidechain message timestamp for sorting
+  - Warmup and reconnection messages are properly ignored
+  - Cross-file summary references are properly handled
+- **Smart Title Extraction**: Implemented the exact title priority logic that Claude Code uses
+  - First user message content takes priority
+  - Falls back to assistant response if no user message
+  - Handles edge cases like warmup-only conversations
+- **Comprehensive Documentation**: Added detailed findings documentation explaining the `.jsonl` format discoveries
+
+### Fixed
+
+- **Timestamp Accuracy**: Fixed conversations showing "12h ago" when Claude Code showed "6d ago"
+  - Root cause: We were using warmup message timestamps instead of actual conversation timestamps
+  - Solution: Scan backward through messages to find last non-sidechain message
+- **Sort Order**: Fixed conversations appearing in different order than Claude Code
+  - Implemented proper tiebreaking when display times are identical
+  - Now matches Claude Code's list exactly
+- **Title Display**: Fixed title extraction to match Claude Code's priority system
+  - Warmup conversations now show appropriate titles
+  - Empty conversations are properly identified
+
+### Changed
+
+- **Conversation Detection**: Improved logic to distinguish between real conversations and warmup-only sessions
+- **File Organization**: Moved documentation to `docs/`, debug scripts to `debug/`, build artifacts to `dist/`
+
+### Technical Notes
+
+For developers interested in the `.jsonl` format, see [docs/FINDINGS.md](docs/FINDINGS.md) for detailed documentation on:
+- Message structure and types
+- Cross-file summary mechanism (leafUuid)
+- Sidechain vs non-sidechain messages
+- Timestamp extraction logic
+- Title priority system
+- Conversation sorting algorithm
+
 ## [0.1.0] - 2025-10-26
 
 ### Added
