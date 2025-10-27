@@ -13,9 +13,20 @@
 🎯 **Pixel-Perfect Matching** - Conversations display exactly like Claude Code (same titles, timestamps, sorting)
 🎯 **Plus Full Management** - Archive, organize, and delete conversations too
 
-## Recent Improvements (v0.2.0)
+## Recent Improvements (v0.2.1)
 
-After several days of intensive reverse-engineering of Claude Code's undocumented `.jsonl` format, we've achieved perfect parity with Claude Code's native conversation display:
+🎉 **Major Update: Renamed Titles Now Persist During Active Conversations!**
+
+After discovering that Claude Code validates `leafUuid` references in conversation summaries, we've implemented an intelligent file watcher that automatically maintains your renamed titles even while you're actively chatting:
+
+✨ **Real-Time Title Maintenance** - File watcher automatically detects when conversations are modified and updates internal references to keep renamed titles working
+✨ **Zero Manual Intervention** - Renamed conversations stay renamed, even during active Claude Code sessions
+✨ **Improved Search** - Fast, project-scoped search with visual progress feedback
+✨ **Clean Console Output** - Removed verbose logging for better performance
+
+### Previous Improvements (v0.2.0)
+
+After several days of intensive reverse-engineering of Claude Code's undocumented `.jsonl` format, we achieved perfect parity with Claude Code's native conversation display:
 
 ✨ **Accurate Timestamps** - Shows exact same relative times (Today, Yesterday, Past week, etc.)
 ✨ **Perfect Sorting** - Conversations appear in identical order to Claude Code's list
@@ -29,13 +40,14 @@ The journey was challenging - the format uses complex cross-file references, war
 ### 🗂️ Conversation Organization
 - **Tree View** - Browse all your Claude Code conversations in a dedicated sidebar
 - **Group by Project or Date** - Organize conversations the way you work
-- **Search & Filter** - Quickly find the conversation you need
+- **Smart Search** - Fast full-text search with progress feedback, scoped to current project
 
 ### ✏️ True Conversation Renaming
 - **Actually modifies the conversation data** - not just a display name in this extension
+- **Automatic maintenance** - File watcher keeps renamed titles working during active conversations
 - Changes persist in Claude Code's native interface
 - Renames appear everywhere: sidebar, conversation history, recent files
-- Works by editing the first user message in the `.jsonl` file (Claude Code's title source)
+- Uses summary-based renaming with automatic `leafUuid` updates
 - Smart validation prevents naming conflicts
 - Rename directly from tree view or command palette
 
