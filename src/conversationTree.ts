@@ -206,7 +206,15 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
       : allConversations.filter(conv => showEmpty || FileOperations.hasRealMessages(conv.filePath));
 
     // Sort by last message time (always newest first for grouping)
-    conversations.sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
+    // Use actualLastMessageTime as tiebreaker when display times are the same
+    conversations.sort((a, b) => {
+      const timeDiff = b.lastMessageTime.getTime() - a.lastMessageTime.getTime();
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      // Tiebreaker: use actual last message time (more recent activity first)
+      return b.actualLastMessageTime.getTime() - a.actualLastMessageTime.getTime();
+    });
 
     // Group by time periods
     const timeGroups = this.groupByTimePeriod(conversations);
@@ -275,7 +283,15 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     }
 
     // Sort by last message time (always newest first for grouping)
-    conversations.sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
+    // Use actualLastMessageTime as tiebreaker when display times are the same
+    conversations.sort((a, b) => {
+      const timeDiff = b.lastMessageTime.getTime() - a.lastMessageTime.getTime();
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      // Tiebreaker: use actual last message time (more recent activity first)
+      return b.actualLastMessageTime.getTime() - a.actualLastMessageTime.getTime();
+    });
 
     // Group by time periods
     const timeGroups = this.groupByTimePeriod(conversations);

@@ -160,36 +160,46 @@ Based on findings, Claude Code appears to use:
 
 4. **Fallback** (possibly first message or "Untitled")
 
-## Recommended Changes for Our Extension
+## Implemented Changes in Our Extension
 
-### High Priority
+### ✅ Completed
 
-1. **Implement Cross-File Summary Lookup**
-   ```typescript
-   // For each conversation file being processed:
-   // 1. Extract all message UUIDs from the file
-   // 2. Search OTHER files in the same project for summary messages
-   // 3. Check if any summary's leafUuid matches one of this file's message UUIDs
-   // 4. If found, use that summary as the title (priority 1)
-   ```
+1. **Cross-File Summary Lookup** - IMPLEMENTED
+   - Extension now searches other files for summaries with `leafUuid` pointing to current conversation
+   - Skips summaries that point to OTHER files (avoids showing wrong titles)
+   - Successfully matches Claude Code's title display
 
-2. **Add Warning for Potential Issues**
+2. **Last Non-Sidechain Message Timestamp** - IMPLEMENTED
+   - Scans backward from last message to find first non-sidechain message
+   - Uses that timestamp for display and sorting
+   - Ignores warmup/reconnection messages after real conversation ends
+   - Matches Claude Code's "6d ago" vs "12h ago" behavior
+
+3. **Time-Based Grouping** - IMPLEMENTED
+   - Groups conversations by: Today, Yesterday, Past week, Past month, Older
+   - Sorts newest-first within each group
+   - Matches Claude Code's organization
+
+4. **Warmup Conversation Filter** - IMPLEMENTED
+   - Added toggle button to show/hide warmup-only conversations
+   - Hidden by default (matches Claude Code's clean list)
+   - Can be enabled to view and delete unused warmup sessions
+
+5. **Skip Warmup Messages in Title Extraction** - IMPLEMENTED
+   - Skips messages that are exactly "Warmup" when finding title
+   - Uses first real user message instead
+
+### Recommended Future Enhancements
+
+1. **Add Warning for Potential Issues**
    - Flag conversations with string content format (may not display in Claude Code)
    - Flag conversations with mismatched `cwd` capitalization
    - Flag conversations with duplicate message UUIDs
 
-### Medium Priority
-
-3. **Improve Title Extraction Logic**
-   - Current priority is mostly correct
-   - Add cross-file summary lookup as priority 0
-   - Consider adding metadata about title source (local vs cross-file)
-
-### Low Priority
-
-4. **Add Conversation Relationship Visualization**
+2. **Add Conversation Relationship Visualization**
    - Show when conversations are linked via leafUuid
    - Display parent/child relationships across session files
+   - Visual indicator for cross-file summaries
 
 ## Technical Details
 
@@ -272,6 +282,73 @@ Based on findings, Claude Code appears to use:
 2. All used array format for content
 3. Converted string format to array format
 4. Behavior changed (became visible)
+
+### 6. Conversation Sorting & Timestamps
+
+**CRITICAL FINDING:** Claude Code sorts conversations by the last **NON-SIDECHAIN** message timestamp, not by file modification time or the last message.
+
+**Discovery Process:**
+1. Noticed "What Skills are available?" showed 12h in our extension vs 6d in Claude Code
+2. Investigated file `97409d9f-f20d-464b-812a-6e0ef945918c.jsonl`
+3. Found line 51 was the last message displayed in Claude Code's chat
+4. Lines 52-57 contained additional messages with more recent timestamps
+5. All messages in lines 52-57 had `isSidechain: true` (warmup reconnections)
+
+**Evidence:**
+- Manually changed timestamp of last non-sidechain message in a conversation
+- Order immediately changed in Claude Code to reflect new timestamp
+- Confirms Claude Code uses last non-sidechain message for sorting
+
+**How It Works:**
+
+For **regular conversations:**
+1. Scan backward from last message
+2. Find first message where `isSidechain: false`
+3. Use that message's timestamp for display and sorting
+4. Ignore all sidechain warmup messages after it
+
+For **cross-file summaries (API Errors, etc.):**
+1. Use the `leafUuid` message timestamp (the "branch point")
+2. This is usually older than the last activity
+3. Represents when the conversation branch diverged
+
+**Real Example:**
+```javascript
+// File: 97409d9f-f20d-464b-812a-6e0ef945918c.jsonl
+
+// Line 51: Last non-sidechain message (Claude Code uses this timestamp)
+{
+  "type": "assistant",
+  "message": { ... },
+  "timestamp": "2025-10-21T07:27:01.559Z",  // 6d ago ✓
+  "isSidechain": false
+}
+
+// Lines 52-57: Warmup messages (IGNORED by Claude Code)
+{
+  "type": "user",
+  "message": { "content": "Warmup" },
+  "timestamp": "2025-10-26T19:16:01.272Z",  // 12h ago ✗
+  "isSidechain": true  // ← Key: This makes it ignored
+}
+```
+
+**Time Grouping:**
+
+Claude Code groups conversations into time periods:
+- **Today** - Midnight today to now
+- **Yesterday** - Midnight yesterday to midnight today
+- **Past week** - 7 days ago to yesterday
+- **Past month** - 30 days ago to past week
+- **Older** - Everything before 30 days
+
+Within each group, conversations are sorted **newest-first** (most recent activity at top).
+
+**Implication:**
+- Our extension was using file modification time or last message time
+- This caused mismatches like "12h ago" vs "6d ago"
+- Must filter out sidechain messages when determining conversation age
+- For cross-file summaries, must use leafUuid message timestamp instead
 
 ## Open Questions
 

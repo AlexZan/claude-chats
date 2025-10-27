@@ -39,7 +39,8 @@ export interface Conversation {
   filePath: string;
   project: string;
   lastModified: Date;
-  lastMessageTime: Date; // Timestamp of the last message in the conversation
+  lastMessageTime: Date; // Display time (first user message or leafUuid message)
+  actualLastMessageTime: Date; // Actual last message time (for tiebreaking)
   messageCount: number;
   fileSize: number;
   isArchived: boolean;

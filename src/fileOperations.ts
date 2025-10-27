@@ -632,9 +632,10 @@ export class FileOperations {
 
           // Get conversation timestamp (matches Claude Code behavior)
           // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
-          // Priority 2: Use the first user message timestamp (the title message)
+          // Priority 2: Use last message timestamp (most recent activity)
           // Priority 3: Fall back to file mtime
           let lastMessageTime = stats.mtime;
+          let actualLastMessageTime = stats.mtime;
 
           const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
           if (crossFileSummary) {
@@ -642,19 +643,19 @@ export class FileOperations {
             const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
             if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
               lastMessageTime = new Date(leafMessage.timestamp);
+              actualLastMessageTime = lastMessageTime;
               console.log('[FileOperations] Using leafUuid message timestamp:', lastMessageTime.toISOString());
             }
-          } else {
-            // No cross-file summary, use FIRST user message timestamp
-            const firstUserMessage = FileOperations.getFirstUserMessage(filePath);
-            if (firstUserMessage && 'timestamp' in firstUserMessage && firstUserMessage.timestamp) {
-              lastMessageTime = new Date(firstUserMessage.timestamp);
-              console.log('[FileOperations] Using first user message timestamp:', lastMessageTime.toISOString());
-            } else if (messages.length > 0) {
-              // Fallback to last message if no first user message found
-              const lastMsg = messages[messages.length - 1];
-              if ('timestamp' in lastMsg && lastMsg.timestamp) {
-                lastMessageTime = new Date(lastMsg.timestamp);
+          } else if (messages.length > 0) {
+            // No cross-file summary, use last NON-SIDECHAIN message timestamp (most recent activity)
+            // Find last message that isn't a warmup/sidechain
+            for (let i = messages.length - 1; i >= 0; i--) {
+              const msg = messages[i];
+              if (FileOperations.isConversationMessage(msg) && !msg.isSidechain && 'timestamp' in msg && msg.timestamp) {
+                lastMessageTime = new Date(msg.timestamp);
+                actualLastMessageTime = lastMessageTime;
+                console.log('[FileOperations] Using last non-sidechain message timestamp:', lastMessageTime.toISOString());
+                break;
               }
             }
           }
@@ -666,6 +667,7 @@ export class FileOperations {
             project: projectDir,
             lastModified: stats.mtime,
             lastMessageTime: lastMessageTime,
+            actualLastMessageTime: actualLastMessageTime,
             messageCount: messages.length,
             fileSize: stats.size,
             isArchived: false
@@ -726,9 +728,10 @@ export class FileOperations {
 
           // Get conversation timestamp (matches Claude Code behavior)
           // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
-          // Priority 2: Use the first user message timestamp (the title message)
+          // Priority 2: Use last message timestamp (most recent activity)
           // Priority 3: Fall back to file mtime
           let lastMessageTime = stats.mtime;
+          let actualLastMessageTime = stats.mtime;
 
           const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
           if (crossFileSummary) {
@@ -736,19 +739,19 @@ export class FileOperations {
             const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
             if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
               lastMessageTime = new Date(leafMessage.timestamp);
+              actualLastMessageTime = lastMessageTime;
               console.log('[FileOperations] Using leafUuid message timestamp:', lastMessageTime.toISOString());
             }
-          } else {
-            // No cross-file summary, use FIRST user message timestamp
-            const firstUserMessage = FileOperations.getFirstUserMessage(filePath);
-            if (firstUserMessage && 'timestamp' in firstUserMessage && firstUserMessage.timestamp) {
-              lastMessageTime = new Date(firstUserMessage.timestamp);
-              console.log('[FileOperations] Using first user message timestamp:', lastMessageTime.toISOString());
-            } else if (messages.length > 0) {
-              // Fallback to last message if no first user message found
-              const lastMsg = messages[messages.length - 1];
-              if ('timestamp' in lastMsg && lastMsg.timestamp) {
-                lastMessageTime = new Date(lastMsg.timestamp);
+          } else if (messages.length > 0) {
+            // No cross-file summary, use last NON-SIDECHAIN message timestamp (most recent activity)
+            // Find last message that isn't a warmup/sidechain
+            for (let i = messages.length - 1; i >= 0; i--) {
+              const msg = messages[i];
+              if (FileOperations.isConversationMessage(msg) && !msg.isSidechain && 'timestamp' in msg && msg.timestamp) {
+                lastMessageTime = new Date(msg.timestamp);
+                actualLastMessageTime = lastMessageTime;
+                console.log('[FileOperations] Using last non-sidechain message timestamp:', lastMessageTime.toISOString());
+                break;
               }
             }
           }
@@ -760,6 +763,7 @@ export class FileOperations {
             project: projectDir,
             lastModified: stats.mtime,
             lastMessageTime: lastMessageTime,
+            actualLastMessageTime: actualLastMessageTime,
             messageCount: messages.length,
             fileSize: stats.size,
             isArchived: true
