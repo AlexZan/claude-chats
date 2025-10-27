@@ -350,6 +350,66 @@ Within each group, conversations are sorted **newest-first** (most recent activi
 - Must filter out sidechain messages when determining conversation age
 - For cross-file summaries, must use leafUuid message timestamp instead
 
+### 7. Summary-Based Conversation Renaming
+
+**MAJOR DISCOVERY:** Conversations can be renamed by adding or modifying the `summary` field in summary messages. This provides a cleaner rename mechanism than modifying the first user message content.
+
+**Test Results (October 27, 2025):**
+
+**Test 1: Modifying Existing Summary**
+- File: `97409d9f-f20d-464b-812a-6e0ef945918c.jsonl`
+- Original: `"summary":"Permissions Skill Not Discovered System Registration Issue"`
+- Modified to: `"summary":"TEST RENAME VIA SUMMARY - 2025-10-27"`
+- Result: ✅ Title changed immediately in Claude Code conversation list
+- Persistence: ✅ Title remained after opening and using the conversation
+
+**Test 2: Adding New Summary**
+- File: `6c74811f-37b5-4359-a0a5-4a2429bd915f.jsonl`
+- Original: No summary (would show "test" from first user message)
+- Added: `{"type":"summary","summary":"NEW SUMMARY ADDED TEST - 2025-10-27","leafUuid":"43a65945-63dc-42c0-800d-08f57136ad4a"}`
+- Result: ✅ New title appeared immediately in Claude Code conversation list
+- Persistence: ✅ Title remained after opening and using the conversation
+
+**How Summary-Based Renaming Works:**
+
+1. **Summary Structure:**
+```json
+{
+  "type": "summary",
+  "summary": "Your Custom Title Here",
+  "leafUuid": "uuid-of-last-non-sidechain-message"
+}
+```
+
+2. **Placement:** Summary should be placed at the beginning of the `.jsonl` file (line 1)
+
+3. **leafUuid:** Must point to the UUID of the last non-sidechain message in the conversation
+   - Can point to messages in the same file OR in a different file (cross-file summary)
+   - Claude Code uses this to determine which conversation the summary belongs to
+
+4. **Priority:** Summary takes precedence over first user message content for title display
+
+**Advantages Over Message Content Modification:**
+
+✅ **Non-invasive** - Doesn't modify actual conversation content
+✅ **Cleaner** - Dedicated field for titles vs. modifying user messages
+✅ **Persistent** - Claude Code doesn't regenerate or overwrite custom summaries
+✅ **Flexible** - Can add summaries to conversations that don't have them
+✅ **Safe** - Doesn't affect conversation history or context
+
+**Implementation for Rename Feature:**
+
+When implementing conversation renaming:
+1. Extract last non-sidechain message UUID from conversation
+2. Check if summary already exists (look for `"type":"summary"` lines)
+3. If exists: Modify the existing summary's `summary` field
+4. If not exists: Add new summary line at beginning of file with proper leafUuid
+5. Reload is not required - Claude Code picks up changes immediately
+
+**Recommendation:**
+
+This is the **preferred method** for implementing conversation renaming in our extension. It's cleaner, safer, and more aligned with Claude Code's internal structure than modifying first user message content.
+
 ## Open Questions
 
 1. **Why do conversations fork into separate session files?**
@@ -385,12 +445,18 @@ Within each group, conversations are sorted **newest-first** (most recent activi
 ## Files Referenced
 
 - `87d2218d-91ed-4310-9f98-43559b89491d.jsonl` - Test case for cross-file summary
-- `97409d9f-f20d-464b-812a-6e0ef945918c.jsonl` - Contains summary for 87d2218d
-- `6c74811f-37b5-4359-a0a5-4a2429bd915f.jsonl` - Working test conversation
+- `97409d9f-f20d-464b-812a-6e0ef945918c.jsonl` - Contains summary for 87d2218d; used for summary modification test
+- `6c74811f-37b5-4359-a0a5-4a2429bd915f.jsonl` - Used for adding new summary test
 - Various test copies created during investigation
 
 ## Conclusion
 
-The most significant finding is the cross-file summary mechanism via `leafUuid`. Our extension currently extracts titles solely from the conversation file itself, missing summaries that may exist in related files. Implementing cross-file summary lookup is the key improvement needed to match Claude Code's title display behavior.
+The most significant findings are:
 
-Additionally, showing all conversation files individually (even those Claude Code deduplicates) is actually a feature, not a bug - it provides users with visibility into conversation relationships and potential issues.
+1. **Summary-Based Renaming (NEW):** Conversations can be reliably renamed by adding/modifying summary messages. This is the **recommended approach** for implementing conversation renaming - it's cleaner, safer, and more persistent than modifying user message content.
+
+2. **Cross-File Summary Mechanism:** The `leafUuid` mechanism allows summaries to reference messages across different session files. This is crucial for proper title extraction in conversations that span multiple files.
+
+3. **Non-Sidechain Timestamp Filtering:** Claude Code uses the last non-sidechain message timestamp for sorting, ignoring warmup/reconnection messages that occur after the conversation ends.
+
+These discoveries enable our extension to provide accurate conversation display matching Claude Code's behavior, while also offering a robust rename feature that Anthropic hasn't yet implemented natively.
