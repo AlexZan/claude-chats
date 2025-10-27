@@ -142,6 +142,8 @@ export class ConversationViewer {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
       z-index: 100;
     }
 
@@ -151,6 +153,11 @@ export class ConversationViewer {
       display: flex;
       align-items: center;
       gap: 8px;
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .readonly-badge {
@@ -172,6 +179,8 @@ export class ConversationViewer {
       cursor: pointer;
       font-size: 13px;
       font-family: var(--vscode-font-family);
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .save-button:hover {
@@ -181,6 +190,27 @@ export class ConversationViewer {
     .save-button:active {
       background-color: var(--vscode-button-hoverBackground);
       transform: translateY(1px);
+    }
+
+    @media (max-width: 600px) {
+      .header {
+        padding: 12px 16px;
+      }
+
+      .header-title {
+        font-size: 14px;
+        flex-basis: 100%;
+      }
+
+      .save-button {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+
+      .readonly-badge {
+        font-size: 10px;
+        padding: 1px 6px;
+      }
     }
 
     .messages-container {
