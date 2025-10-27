@@ -47,7 +47,7 @@ export class ConversationViewer {
       ConversationViewer.currentPanel.conversationPath = conversationPath;
       // Update the panel title to match the new conversation
       const newTitle = FileOperations.getConversationTitle(conversationPath);
-      const truncatedTitle = ConversationTreeItem.truncateTitle(newTitle);
+      const truncatedTitle = ConversationTreeItem.truncateTitle(newTitle, 40);
       ConversationViewer.currentPanel.panel.title = `📖 ${truncatedTitle}`;
       ConversationViewer.currentPanel.panel.reveal(column);
       ConversationViewer.currentPanel.update();
@@ -56,7 +56,7 @@ export class ConversationViewer {
 
     // Otherwise, create a new panel
     const title = FileOperations.getConversationTitle(conversationPath);
-    const truncatedTitle = ConversationTreeItem.truncateTitle(title);
+    const truncatedTitle = ConversationTreeItem.truncateTitle(title, 40);
     const panel = vscode.window.createWebviewPanel(
       'claudeConversationViewer',
       `📖 ${truncatedTitle}`,

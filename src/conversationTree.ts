@@ -53,18 +53,16 @@ export class ConversationTreeItem extends vscode.TreeItem {
   /**
    * Truncate title to match Claude Code's display format
    * - First line only (no newlines)
-   * - Max 60 characters
+   * - Max length customizable (default 60 for tree view)
    * - Add ellipsis if truncated
    */
-  public static truncateTitle(title: string): string {
-    const MAX_LENGTH = 60;
-
+  public static truncateTitle(title: string, maxLength: number = 60): string {
     // Get first line only
     const firstLine = title.split('\n')[0];
 
     // Truncate if too long
-    if (firstLine.length > MAX_LENGTH) {
-      return firstLine.substring(0, MAX_LENGTH) + '...';
+    if (firstLine.length > maxLength) {
+      return firstLine.substring(0, maxLength) + '...';
     }
 
     return firstLine;
