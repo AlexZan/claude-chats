@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### The Journey
 
-This release represents weeks of reverse-engineering Claude Code's conversation file format. When Anthropic announced they were working on features like "rename conversations," we couldn't wait - these are essential quality-of-life features that users need now. So we dove deep into the undocumented `.jsonl` format to figure out how Claude Code actually works.
+This release represents several days of intensive reverse-engineering of Claude Code's conversation file format. When Anthropic announced they were working on features like "rename conversations," we couldn't wait - these are essential quality-of-life features that users need now. So we dove deep into the undocumented `.jsonl` format to figure out how Claude Code actually works.
 
 The journey was challenging. The conversation files use a complex format with cross-file references, warmup messages, sidechain reconnections, and subtle timestamp behaviors that weren't immediately obvious. Through careful analysis of hundreds of conversation files, manual testing, and comparing our output against Claude Code's behavior pixel by pixel, we finally cracked it.
 

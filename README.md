@@ -15,7 +15,7 @@
 
 ## Recent Improvements (v0.2.0)
 
-After weeks of reverse-engineering Claude Code's undocumented `.jsonl` format, we've achieved perfect parity with Claude Code's native conversation display:
+After several days of intensive reverse-engineering of Claude Code's undocumented `.jsonl` format, we've achieved perfect parity with Claude Code's native conversation display:
 
 ✨ **Accurate Timestamps** - Shows exact same relative times (Today, Yesterday, Past week, etc.)
 ✨ **Perfect Sorting** - Conversations appear in identical order to Claude Code's list
