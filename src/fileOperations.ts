@@ -218,25 +218,36 @@ export class FileOperations {
           continue;
         }
 
-        let text = '';
+        // Check if there's any real user content (not just system metadata)
+        let hasRealContent = false;
 
         if (typeof content === 'string') {
-          text = content;
+          // String content - check if it's not a system metadata message
+          if (!/^<(ide_|system-|user-|command-)/.test(content.trim())) {
+            hasRealContent = true;
+          }
         } else if (Array.isArray(content)) {
+          // Array content - check each text item individually
           for (const item of content) {
             if (item.type === 'text' && item.text) {
-              text += item.text;
+              const text = item.text.trim();
+              // Skip system metadata items
+              if (/^<(ide_|system-|user-|command-)/.test(text)) {
+                continue;
+              }
+              // Found a real text item that's not system metadata
+              if (text.length > 0) {
+                hasRealContent = true;
+                break;
+              }
             }
           }
         }
 
-        // Skip if it's a system metadata message
-        if (/^<(ide_|system-|user-|command-)/.test(text.trim())) {
-          continue;
+        if (hasRealContent) {
+          // Found a real (non-sidechain) message with actual user content
+          return true;
         }
-
-        // Found a real (non-sidechain) message
-        return true;
       }
 
       return false;
@@ -612,6 +623,92 @@ export class FileOperations {
   }
 
   /**
+   * Update cross-file summaries that reference the given conversation
+   * When a conversation is renamed, we need to update summaries in OTHER files
+   * that point to this conversation via leafUuid
+   */
+  private static updateCrossFileSummaries(filePath: string, newTitle: string): void {
+    console.log(`[updateCrossFileSummaries] Checking for cross-file summaries pointing to ${path.basename(filePath)}`);
+
+    // Get all message UUIDs from the target file
+    const targetMessages = this.parseConversation(filePath);
+    const targetMessageUuids = new Set<string>();
+    for (const message of targetMessages) {
+      if ('uuid' in message && message.uuid) {
+        targetMessageUuids.add(message.uuid);
+      }
+    }
+
+    if (targetMessageUuids.size === 0) {
+      console.log(`[updateCrossFileSummaries] No message UUIDs found in target file`);
+      return;
+    }
+
+    console.log(`[updateCrossFileSummaries] Target file has ${targetMessageUuids.size} message UUIDs`);
+
+    // Get project directory
+    const projectDir = path.dirname(filePath);
+    const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl'));
+
+    let updatedCount = 0;
+
+    for (const file of files) {
+      // Skip the current file (we already updated it)
+      if (file === path.basename(filePath)) {
+        continue;
+      }
+
+      const otherFilePath = path.join(projectDir, file);
+
+      try {
+        // Find summaries in this file
+        const summaries = this.findSummaryMessages(otherFilePath);
+
+        if (summaries.length === 0) {
+          continue;
+        }
+
+        // Check if any summaries point to our target conversation
+        const summariesToUpdate: Array<{lineIndex: number, summary: SummaryMessage}> = [];
+        for (const {lineIndex, summary} of summaries) {
+          if (summary.leafUuid && targetMessageUuids.has(summary.leafUuid)) {
+            console.log(`[updateCrossFileSummaries] Found cross-file summary in ${file} at line ${lineIndex}: "${summary.summary}"`);
+            summariesToUpdate.push({lineIndex, summary});
+          }
+        }
+
+        if (summariesToUpdate.length === 0) {
+          continue;
+        }
+
+        // Update the summaries in this file
+        const content = fs.readFileSync(otherFilePath, 'utf-8');
+        const lines = content.split('\n');
+
+        for (const {lineIndex, summary} of summariesToUpdate) {
+          const updatedSummary: SummaryMessage = {
+            type: 'summary',
+            summary: newTitle,
+            leafUuid: summary.leafUuid
+          };
+          lines[lineIndex] = JSON.stringify(updatedSummary);
+          updatedCount++;
+          console.log(`[updateCrossFileSummaries] Updated cross-file summary in ${file} at line ${lineIndex}`);
+        }
+
+        // Write back to the other file
+        fs.writeFileSync(otherFilePath, lines.join('\n'), 'utf-8');
+
+      } catch (error) {
+        console.log(`[updateCrossFileSummaries] Error processing ${file}:`, error);
+        continue;
+      }
+    }
+
+    console.log(`[updateCrossFileSummaries] Updated ${updatedCount} cross-file summaries`);
+  }
+
+  /**
    * Update conversation title using summary-based approach (RECOMMENDED)
    * This method adds or modifies a summary message to change the conversation title
    * without touching the actual conversation content
@@ -675,6 +772,9 @@ export class FileOperations {
     // Write back to file
     fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
     console.log(`[updateConversationTitle] Successfully wrote updated file`);
+
+    // Now update any cross-file summaries that point to this conversation
+    this.updateCrossFileSummaries(filePath, newTitle);
   }
 
   /**
@@ -1064,6 +1164,101 @@ export class FileOperations {
     }
 
     return markdown;
+  }
+
+  /**
+   * Check if a conversation has a stale leafUuid in its summary
+   * A leafUuid is stale if it doesn't point to the actual last non-sidechain message
+   * Returns the correct leafUuid if stale, null if current or no summary exists
+   */
+  static checkForStaleLeafUuid(filePath: string): string | null {
+    try {
+      const summaries = this.findSummaryMessages(filePath);
+
+      if (summaries.length === 0) {
+        // No summary, nothing to check
+        return null;
+      }
+
+      // Get the actual last non-sidechain message UUID
+      const actualLastUuid = this.findLastNonSidechainMessageUuid(filePath);
+
+      if (!actualLastUuid) {
+        // No non-sidechain messages, can't validate
+        return null;
+      }
+
+      // Check first summary (the one Claude Code uses)
+      const summary = summaries[0].summary;
+
+      if (!summary.leafUuid) {
+        // Summary has no leafUuid, nothing to check
+        return null;
+      }
+
+      // Check if leafUuid points to actual last message
+      if (summary.leafUuid !== actualLastUuid) {
+        console.log(`[checkForStaleLeafUuid] Stale leafUuid detected in ${path.basename(filePath)}`);
+        console.log(`[checkForStaleLeafUuid] Current: ${summary.leafUuid}, Actual: ${actualLastUuid}`);
+        return actualLastUuid;
+      }
+
+      // leafUuid is current
+      return null;
+    } catch (error) {
+      console.log('[checkForStaleLeafUuid] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Auto-update stale leafUuid in conversation summary
+   * Called by file watcher when conversation files are modified
+   * Returns true if an update was made
+   */
+  static autoUpdateStaleLeafUuid(filePath: string): boolean {
+    try {
+      const correctLeafUuid = this.checkForStaleLeafUuid(filePath);
+
+      if (!correctLeafUuid) {
+        // No update needed
+        return false;
+      }
+
+      console.log(`[autoUpdateStaleLeafUuid] Auto-updating leafUuid in ${path.basename(filePath)}`);
+
+      // Read file
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+
+      // Find and update first summary
+      const summaries = this.findSummaryMessages(filePath);
+
+      if (summaries.length === 0) {
+        // No summary to update (shouldn't happen based on checkForStaleLeafUuid)
+        return false;
+      }
+
+      const targetSummary = summaries[0];
+
+      // Update the summary with correct leafUuid
+      const updatedSummary: SummaryMessage = {
+        type: 'summary',
+        summary: targetSummary.summary.summary, // Keep existing title
+        leafUuid: correctLeafUuid
+      };
+
+      lines[targetSummary.lineIndex] = JSON.stringify(updatedSummary);
+
+      // Write back to file (no backup for auto-updates)
+      fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+
+      console.log(`[autoUpdateStaleLeafUuid] Successfully updated leafUuid to: ${correctLeafUuid}`);
+      return true;
+    } catch (error) {
+      console.log('[autoUpdateStaleLeafUuid] Error:', error);
+      return false;
+    }
   }
 
   /**

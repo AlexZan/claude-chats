@@ -238,12 +238,77 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // Watch for file system changes to refresh tree
-  const watcher = vscode.workspace.createFileSystemWatcher('**/*.jsonl');
+  // Watch for Claude Code conversation file changes with intelligent auto-update
+  const claudeProjectsPath = require('path').join(require('os').homedir(), '.claude', 'projects');
+  const watchPattern = new vscode.RelativePattern(claudeProjectsPath, '**/*.jsonl');
+  const watcher = vscode.workspace.createFileSystemWatcher(watchPattern);
 
-  watcher.onDidCreate(() => treeProvider.refresh());
-  watcher.onDidDelete(() => treeProvider.refresh());
-  watcher.onDidChange(() => treeProvider.refresh());
+  // Debounce map to handle rapid file writes
+  const debounceTimers = new Map<string, NodeJS.Timeout>();
+  const DEBOUNCE_DELAY = 500; // 500ms
+
+  // Handle file creation (new conversations)
+  watcher.onDidCreate((uri) => {
+    console.log(`[FileWatcher] New conversation detected: ${uri.fsPath}`);
+    treeProvider.refresh();
+  });
+
+  // Handle file deletion
+  watcher.onDidDelete((uri) => {
+    console.log(`[FileWatcher] Conversation deleted: ${uri.fsPath}`);
+
+    // Clear any pending debounce for this file
+    const existingTimer = debounceTimers.get(uri.fsPath);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      debounceTimers.delete(uri.fsPath);
+    }
+
+    treeProvider.refresh();
+  });
+
+  // Handle file changes with debouncing and auto-update
+  watcher.onDidChange((uri) => {
+    // Skip backup files
+    if (uri.fsPath.endsWith('.backup')) {
+      return;
+    }
+
+    // Clear existing timer for this file
+    const existingTimer = debounceTimers.get(uri.fsPath);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Set new debounced timer
+    const timer = setTimeout(() => {
+      debounceTimers.delete(uri.fsPath);
+
+      console.log(`[FileWatcher] Conversation modified: ${uri.fsPath}`);
+
+      // Check for stale leafUuid and auto-update
+      const { FileOperations } = require('./fileOperations');
+      const wasUpdated = FileOperations.autoUpdateStaleLeafUuid(uri.fsPath);
+
+      if (wasUpdated) {
+        console.log(`[FileWatcher] Auto-updated stale leafUuid for: ${uri.fsPath}`);
+        vscode.window.showInformationMessage('Conversation title updated automatically');
+      }
+
+      // Refresh tree view to show any changes
+      treeProvider.refresh();
+    }, DEBOUNCE_DELAY);
+
+    debounceTimers.set(uri.fsPath, timer);
+  });
+
+  // Clean up timers on deactivation
+  context.subscriptions.push({
+    dispose: () => {
+      debounceTimers.forEach(timer => clearTimeout(timer));
+      debounceTimers.clear();
+    }
+  });
 
   context.subscriptions.push(watcher);
 }

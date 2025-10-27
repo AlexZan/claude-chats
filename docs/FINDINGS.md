@@ -410,6 +410,61 @@ When implementing conversation renaming:
 
 This is the **preferred method** for implementing conversation renaming in our extension. It's cleaner, safer, and more aligned with Claude Code's internal structure than modifying first user message content.
 
+**CRITICAL DISCOVERY: leafUuid Validation (October 27, 2025):**
+
+Through rigorous testing, we discovered that **Claude Code validates that the summary's `leafUuid` must point to the ACTUAL last non-sidechain message**. If there are newer messages after the leafUuid, Claude Code rejects the summary as stale and falls back to the first user message for the title.
+
+**How We Discovered This:**
+
+Test procedure:
+1. Created new conversation with 7 messages (2 warmup pairs, 1 user/assistant pair)
+2. Renamed it → summary with leafUuid pointing to last message (line 5) → ✅ Works
+3. Continued conversation → added new messages (lines 8-12)
+4. Summary's leafUuid still pointed to old message (line 5) → ❌ Broken (shows first message)
+5. Line-by-line testing: Introducing line 12 (first message AFTER leafUuid) breaks the summary
+6. Updated leafUuid to point to new last message (line 12) → ✅ Works again!
+
+**Evidence from testing:**
+```
+Working state (7 lines):
+  Summary: {"leafUuid":"553d3980-0fa5-4ea5-8b27-4ec5711ed2bc"}  // Line 5 is last message
+  Last message: line 5, uuid="553d3980-0fa5-4ea5-8b27-4ec5711ed2bc"
+  Result: ✅ Claude Code shows custom title
+
+Broken state (12 lines):
+  Summary: {"leafUuid":"553d3980-0fa5-4ea5-8b27-4ec5711ed2bc"}  // Still points to line 5
+  Last message: line 12, uuid="8d43a595-4ee8-42c3-a44c-c923595f676d"  // NEW last message
+  Line 12 has: "parentUuid":"553d3980..."  // Continues FROM the old leafUuid
+  Result: ❌ Claude Code ignores summary, shows "new chat" (first message)
+
+Fixed state (12 lines):
+  Summary: {"leafUuid":"8d43a595-4ee8-42c3-a44c-c923595f676d"}  // Updated to line 12
+  Last message: line 12, uuid="8d43a595-4ee8-42c3-a44c-c923595f676d"
+  Result: ✅ Claude Code shows custom title again!
+```
+
+**Why Summaries Become Stale:**
+
+The problem occurs when users:
+1. Rename a conversation (leafUuid correct at time of rename)
+2. Continue the conversation (Claude Code appends new messages)
+3. Don't rename again (leafUuid stays pointing to old message)
+4. Claude Code detects newer messages exist after leafUuid → rejects summary as stale
+
+**Solution Implemented:**
+
+Our extension's `updateConversationTitle()` already updates the leafUuid correctly when renaming. However, if users continue a conversation after renaming without renaming again, the leafUuid becomes stale.
+
+**Planned Enhancement:**
+
+Implement a file system watcher to:
+- Detect when .jsonl files are modified (user continues conversation)
+- Automatically update stale leafUuids to point to new last message
+- Keep renamed titles working in real-time, even during active conversations
+- Auto-detect new conversations and refresh the tree view
+
+This provides seamless UX where renamed conversations stay renamed even as users continue chatting, with zero manual intervention required.
+
 ### 8. Failed/Legacy Rename Approaches
 
 Before discovering summary-based renaming, we explored several approaches that either failed or had significant drawbacks. Documented here to prevent repeating these mistakes.
