@@ -1,0 +1,319 @@
+# Claude Code Conversation Display & Title Extraction - Research Findings
+
+## Executive Summary
+
+This document captures comprehensive findings from investigating how Claude Code determines which conversations to display and what titles to show, compared to our VS Code extension's behavior.
+
+## Key Discoveries
+
+### 1. Conversation Visibility in Claude Code
+
+**Finding:** Claude Code scans the filesystem directly for `.jsonl` files, NOT solely relying on `~/.claude/history.jsonl`.
+
+**Evidence:**
+- Test conversations created without `history.jsonl` entries still appeared in Claude Code
+- Removing entries from `history.jsonl` did NOT hide conversations from Claude Code's list
+- `history.jsonl` appears to be used for quick resume/autocomplete, not as the primary registry
+
+**Implication:** Our extension's approach of scanning filesystem is correct and matches Claude Code's behavior.
+
+### 2. UUID Deduplication
+
+**Finding:** Claude Code uses message UUIDs to deduplicate conversations. Files sharing message UUIDs are treated as the same conversation.
+
+**Evidence:**
+- Created multiple copies of a conversation file with only session IDs changed
+- All copies with duplicate UUIDs appeared as ONE conversation in Claude Code
+- Only when we generated completely new UUIDs for all messages did a separate conversation appear
+
+**Test Results:**
+```
+File: 6c74811f (original)
+- Showed as: "test"
+
+File: aaaaaaaa (copy with same UUIDs, different session ID)
+- Did NOT show as separate conversation
+- When opened, added warmup messages to the SAME conversation
+
+File: bbbbbbbb (copy with same UUIDs, different content)
+- Did NOT show as separate conversation
+
+File: ab06c5bd (copy with NEW UUIDs generated for all messages)
+- Showed as separate conversation: "completely unique message with new UUIDs"
+```
+
+**Implication:** Our extension shows all files individually, which provides more visibility than Claude Code (useful for debugging/broken chats).
+
+### 3. Content Format Requirements
+
+**Finding:** Claude Code may have issues displaying conversations where user messages use string format instead of array format for content.
+
+**Evidence:**
+- File 87d2218d originally had: `"content": "text here"` (string format)
+- After converting to: `"content": [{"type": "text", "text": "text here"}]` (array format), behavior changed
+- All successfully displayed conversations used array format
+
+**Formats Found:**
+```javascript
+// String format (possibly problematic for Claude Code UI)
+"message": {
+  "role": "user",
+  "content": "do you see the permissions skill i have"
+}
+
+// Array format (preferred)
+"message": {
+  "role": "user",
+  "content": [{"type": "text", "text": "do you see the permissions skill i have"}]
+}
+```
+
+**Note:** Research documentation states both formats are valid, but Claude Code's UI may have a bug handling string format.
+
+### 4. Case-Sensitive Path Matching
+
+**Finding:** The `cwd` field is case-sensitive and must match the project directory encoding.
+
+**Evidence:**
+- File 87d2218d had: `"cwd": "D:\\Dev\\TaskTick"` (capital D)
+- Project directory: `d--Dev-TaskTick` (lowercase d)
+- Working files had: `"cwd": "d:\\Dev\\TaskTick"` (lowercase d)
+- After fixing capitalization, behavior changed
+
+**Implication:** Files with mismatched `cwd` capitalization may be filtered or grouped differently by Claude Code.
+
+### 5. Conversation Branching & Cross-File References
+
+**CRITICAL FINDING:** The `leafUuid` mechanism (documented in research) can point across session files, not just within the same file.
+
+**Background from Research:**
+The research documentation states:
+> "Summary messages provide human-readable conversation titles and branch tracking. The leafUuid points to the active branch's final message, enabling conversation tree navigation."
+
+**Our Discovery - Cross-File Extension:**
+While the research documents `leafUuid` for conversation tree navigation, it doesn't explicitly state that `leafUuid` can point to messages in a **different session file**. This cross-file behavior is what causes title mismatches.
+
+**How It Works:**
+1. Conversation starts in one session file (e.g., `97409d9f`)
+2. A summary message is created with title and `leafUuid`
+3. Conversation continues/forks into a different session file (e.g., `87d2218d`)
+4. The `leafUuid` points to a message UUID in the second file (cross-file reference)
+5. Claude Code follows the `leafUuid` across files to determine which file contains the active conversation
+6. Claude Code displays the summary title from the FIRST file, but opens the SECOND file
+
+**Real Example:**
+```
+File: 97409d9f-f20d-464b-812a-6e0ef945918c.jsonl
+- Contains summary: {
+    "type": "summary",
+    "summary": "Permissions Skill Not Discovered System Registration Issue",
+    "leafUuid": "aa327e0e-d759-4b56-9822-8ad6b1bef00b"
+  }
+
+File: 87d2218d-91ed-4310-9f98-43559b89491d.jsonl
+- Contains message with uuid: "aa327e0e-d759-4b56-9822-8ad6b1bef00b"
+- First user message: "do you see the permissions skill i have"
+
+Claude Code Display:
+- Title: "Permissions Skill Not Discovered System Registration Issue" (from 97409d9f summary)
+- Opens: 87d2218d file when clicked
+- Hiding 97409d9f: Makes the conversation disappear OR show with different title
+- Hiding 87d2218d: Makes the conversation disappear
+```
+
+**Test Results:**
+- Hiding file 87d2218d → "Permissions Skill..." conversation disappeared
+- Hiding file 97409d9f → "Permissions Skill..." conversation disappeared
+- Hiding 97409d9f → File 87d2218d became visible as "do you see the permissions skill i have"
+- Both files needed for the cross-referenced display
+
+**Implication:** Our extension needs to check OTHER session files for summary messages with `leafUuid` pointing to the current file's messages.
+
+## Title Extraction Priority (Current Implementation)
+
+Our extension uses this priority order:
+
+1. **Summary field** (from `type: "summary"` messages)
+   - Skip warmup-related summaries (warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository)
+
+2. **First non-sidechain user message**
+   - `isSidechain: false` and `type: "user"`
+
+3. **First non-sidechain message** (any type)
+   - For conversations that start with assistant messages
+
+4. **Sidechain assistant message** (warmup response)
+   - For warmup-only conversations
+
+5. **Last resort:** "Untitled"
+
+## Title Extraction Priority (Claude Code Inferred Behavior)
+
+Based on findings, Claude Code appears to use:
+
+1. **Summary from ANY file with `leafUuid` pointing to this conversation**
+   - Cross-file summary lookup via `leafUuid` → message UUID matching
+
+2. **Summary in current file** (if exists and not warmup-related)
+
+3. **First user message** (with array content format preferred)
+
+4. **Fallback** (possibly first message or "Untitled")
+
+## Recommended Changes for Our Extension
+
+### High Priority
+
+1. **Implement Cross-File Summary Lookup**
+   ```typescript
+   // For each conversation file being processed:
+   // 1. Extract all message UUIDs from the file
+   // 2. Search OTHER files in the same project for summary messages
+   // 3. Check if any summary's leafUuid matches one of this file's message UUIDs
+   // 4. If found, use that summary as the title (priority 1)
+   ```
+
+2. **Add Warning for Potential Issues**
+   - Flag conversations with string content format (may not display in Claude Code)
+   - Flag conversations with mismatched `cwd` capitalization
+   - Flag conversations with duplicate message UUIDs
+
+### Medium Priority
+
+3. **Improve Title Extraction Logic**
+   - Current priority is mostly correct
+   - Add cross-file summary lookup as priority 0
+   - Consider adding metadata about title source (local vs cross-file)
+
+### Low Priority
+
+4. **Add Conversation Relationship Visualization**
+   - Show when conversations are linked via leafUuid
+   - Display parent/child relationships across session files
+
+## Technical Details
+
+### File Structure
+```
+~/.claude/
+├── history.jsonl              # Quick resume index (NOT primary registry)
+├── settings.json              # User settings
+├── projects/
+│   ├── d--Dev-TaskTick/       # Project directory (encoded path)
+│   │   ├── {uuid}.jsonl       # Session conversation files
+│   │   ├── {uuid}.jsonl
+│   │   └── ...
+│   └── _archive/              # Archived conversations
+└── ...
+```
+
+### Message UUID Relationships
+```javascript
+// Message with UUID
+{
+  "uuid": "aa327e0e-d759-4b56-9822-8ad6b1bef00b",
+  "parentUuid": "previous-message-uuid",  // Links to parent message
+  "isSidechain": false,
+  "sessionId": "87d2218d-91ed-4310-9f98-43559b89491d",
+  ...
+}
+
+// Summary message (in different file!)
+{
+  "type": "summary",
+  "summary": "Conversation Title Here",
+  "leafUuid": "aa327e0e-d759-4b56-9822-8ad6b1bef00b",  // Points to message above
+  "parentUuid": null,
+  "timestamp": "2025-10-21T07:25:00.000Z"
+}
+```
+
+### Content Format Variations
+```javascript
+// Format 1: String (valid JSONL, possibly problematic for Claude Code UI)
+{
+  "type": "user",
+  "message": {
+    "role": "user",
+    "content": "text here"
+  }
+}
+
+// Format 2: Array (preferred, confirmed working)
+{
+  "type": "user",
+  "message": {
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "text here"}
+    ]
+  }
+}
+```
+
+## Testing Methodology
+
+### Test: UUID Deduplication
+1. Created exact copy of conversation with different session ID
+2. Verified separate file exists on filesystem
+3. Checked Claude Code's conversation list
+4. Result: Only one conversation shown (deduplication based on message UUIDs)
+
+### Test: Cross-File Summary Lookup
+1. Identified conversation showing title that doesn't exist in its file
+2. Searched all project files for that title
+3. Found summary in different file (97409d9f)
+4. Extracted leafUuid from summary
+5. Verified leafUuid matches message UUID in original file (87d2218d)
+6. Hid each file separately to confirm both required for display
+
+### Test: Content Format
+1. Checked all successfully displayed conversations
+2. All used array format for content
+3. Converted string format to array format
+4. Behavior changed (became visible)
+
+## Open Questions
+
+1. **Why do conversations fork into separate session files?**
+   - User manually continuing conversation?
+   - Fork/branch functionality?
+   - Session recovery/resume creating new file?
+
+2. **How does Claude Code decide which summary to use when multiple exist?**
+   - Most recent by timestamp?
+   - Longest leafUuid chain?
+   - First found?
+
+3. **What other scenarios create cross-file references?**
+   - Context compaction?
+   - Agent tool usage?
+   - Checkpoint/rewind feature?
+
+4. **Is string content format truly problematic or just coincidental?**
+   - Need more test cases
+   - May be version-specific bug
+   - Research docs say both valid
+
+## Version Information
+
+- Claude Code Version: 2.0.27 (tested)
+- Extension Test Date: October 26-27, 2025
+- Research Sources:
+  - `research/claudejsonlfromat.md`
+  - `research/Claude Code Conversation Logs (.jsonl) – Format and Usage.pdf`
+  - Direct filesystem analysis
+  - Live testing with Claude Code UI
+
+## Files Referenced
+
+- `87d2218d-91ed-4310-9f98-43559b89491d.jsonl` - Test case for cross-file summary
+- `97409d9f-f20d-464b-812a-6e0ef945918c.jsonl` - Contains summary for 87d2218d
+- `6c74811f-37b5-4359-a0a5-4a2429bd915f.jsonl` - Working test conversation
+- Various test copies created during investigation
+
+## Conclusion
+
+The most significant finding is the cross-file summary mechanism via `leafUuid`. Our extension currently extracts titles solely from the conversation file itself, missing summaries that may exist in related files. Implementing cross-file summary lookup is the key improvement needed to match Claude Code's title display behavior.
+
+Additionally, showing all conversation files individually (even those Claude Code deduplicates) is actually a feature, not a bug - it provides users with visibility into conversation relationships and potential issues.

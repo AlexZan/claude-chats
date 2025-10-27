@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { ConversationMessage, Conversation } from './types';
+import { ConversationMessage, Conversation, ConversationLine, SummaryMessage } from './types';
 
 /**
  * Helper class for safe file operations on conversation files
@@ -14,13 +14,13 @@ export class FileOperations {
   /**
    * Parse a .jsonl conversation file
    */
-  static parseConversation(filePath: string): ConversationMessage[] {
+  static parseConversation(filePath: string): ConversationLine[] {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n').filter(line => line.trim());
 
     return lines.map(line => {
       try {
-        return JSON.parse(line) as ConversationMessage;
+        return JSON.parse(line) as ConversationLine;
       } catch (error) {
         throw new Error(`Failed to parse line in ${filePath}: ${error}`);
       }
@@ -28,119 +28,182 @@ export class FileOperations {
   }
 
   /**
+   * Type guard to check if a line is a ConversationMessage
+   */
+  private static isConversationMessage(line: ConversationLine): line is ConversationMessage {
+    return line.type === 'user' || line.type === 'assistant';
+  }
+
+  /**
+   * Type guard to check if a line is a SummaryMessage
+   */
+  private static isSummaryMessage(line: ConversationLine): line is SummaryMessage {
+    return line.type === 'summary';
+  }
+
+  /**
    * Get the first meaningful user message (the title)
-   * Tries to find real (non-sidechain) messages first
-   * Falls back to warmup/sidechain messages if no real messages exist
-   * For warmup-only conversations, prefers assistant response over "Warmup" text
+   * Looks for messages in order:
+   * 1. First non-sidechain user message (actual user input)
+   * 2. First non-sidechain message (any type) that's not metadata
+   * 3. For warmup-only: first sidechain assistant message (initialization)
+   * 4. Last resort: first sidechain message (the "Warmup" message itself)
    */
   static getFirstUserMessage(filePath: string): ConversationMessage | null {
     const messages = FileOperations.parseConversation(filePath);
-    let firstUserMessage: ConversationMessage | null = null;
-    let firstSidechainAssistantMessage: ConversationMessage | null = null;
-    let firstSidechainUserMessage: ConversationMessage | null = null;
 
-    for (const message of messages) {
-      // Skip metadata
-      if ('_metadata' in message) {
+    // First pass: look for non-sidechain user messages (actual conversation titles)
+    for (const line of messages) {
+      if ('_metadata' in line) {
+        continue;
+      }
+      if (!FileOperations.isConversationMessage(line)) {
+        continue;
+      }
+      if (line.isSidechain) {
+        continue;
+      }
+      if (line.type !== 'user') {
         continue;
       }
 
-      // Skip if no message content
-      if (!message.message || !message.message.content) {
+      const text = FileOperations.extractText(line);
+      if (!text) {
         continue;
       }
 
-      // Get the text content
-      const content = message.message.content;
-      let text = '';
-
-      if (typeof content === 'string') {
-        text = content;
-      } else if (Array.isArray(content)) {
-        for (const item of content) {
-          if (item.type === 'text' && item.text) {
-            text += item.text;
-          }
-        }
-      }
-
-      // Skip if empty
-      if (!text.trim()) {
-        continue;
-      }
-
-      // Skip if it's a system metadata message
-      if (/^<(ide_|system-|user-|command-)/.test(text.trim())) {
-        continue;
-      }
-
-      // Handle sidechain (warmup) messages separately - use as fallback only
-      if (message.isSidechain) {
-        // Skip "Warmup" text specifically - it's the trigger, not content
-        if (text.trim() === 'Warmup') {
-          if (!firstSidechainUserMessage) {
-            firstSidechainUserMessage = message;
-          }
-          continue;
-        }
-
-        // Prefer assistant responses (actual initialization message)
-        if (message.type === 'assistant' && !firstSidechainAssistantMessage) {
-          firstSidechainAssistantMessage = message;
-        }
-        // Fallback to non-Warmup sidechain user messages
-        if (message.type === 'user' && !firstSidechainUserMessage) {
-          firstSidechainUserMessage = message;
-        }
-        continue;
-      }
-
-      // Found a real (non-sidechain) message!
-      // For renamed conversations, the first user message is the title
-      // For others, return the first real message we find
-      if (message.type === 'user' && !firstUserMessage) {
-        firstUserMessage = message;
-      }
-
-      // Always return the first real message (could be user or assistant)
-      return message;
+      return line; // Found the first real user message
     }
 
-    // Fallback to first user message (could be from renamed conversation)
-    if (firstUserMessage) {
-      return firstUserMessage;
+    // Second pass: look for non-sidechain messages of any type
+    for (const line of messages) {
+      if ('_metadata' in line) {
+        continue;
+      }
+      if (!FileOperations.isConversationMessage(line)) {
+        continue;
+      }
+      if (line.isSidechain) {
+        continue;
+      }
+
+      const text = FileOperations.extractText(line);
+      if (!text) {
+        continue;
+      }
+
+      return line; // Found the first real message (likely assistant)
     }
 
-    // For warmup-only conversations, prefer assistant response over "Warmup" text
-    if (firstSidechainAssistantMessage) {
-      return firstSidechainAssistantMessage;
+    // Third pass: for warmup-only conversations, use assistant initialization message
+    for (const line of messages) {
+      if ('_metadata' in line) {
+        continue;
+      }
+      if (!FileOperations.isConversationMessage(line)) {
+        continue;
+      }
+      if (!line.isSidechain) {
+        continue;
+      }
+      if (line.type !== 'assistant') {
+        continue;
+      }
+
+      const text = FileOperations.extractText(line);
+      if (!text || text === 'Warmup') {
+        continue;
+      }
+
+      return line; // Found assistant's warmup response
     }
 
-    // Last resort: use non-Warmup sidechain user message
-    if (firstSidechainUserMessage) {
-      return firstSidechainUserMessage;
+    // Last resort: return any message with content
+    for (const line of messages) {
+      if ('_metadata' in line) {
+        continue;
+      }
+      if (!FileOperations.isConversationMessage(line)) {
+        continue;
+      }
+
+      const text = FileOperations.extractText(line);
+      if (!text || text === 'Warmup') {
+        continue;
+      }
+
+      return line;
     }
 
     return null;
   }
 
   /**
-   * Check if conversation has any content (including sidechain/warmup messages)
-   * This allows warmup-only conversations to be displayed (matching Claude Code behavior)
+   * Helper: extract user-visible text from a message, skipping system metadata
+   * For multi-part messages, returns the first non-system text found
+   */
+  private static extractText(message: ConversationMessage): string {
+    if (!message.message || !message.message.content) {
+      return '';
+    }
+
+    const { content } = message.message;
+
+    if (typeof content === 'string') {
+      const text = content.trim();
+      // Return empty if it's a system message
+      if (/^<(ide_|system-|user-|command-)/.test(text)) {
+        return '';
+      }
+      return text;
+    }
+
+    if (Array.isArray(content)) {
+      // For multi-part messages, find the first non-system text
+      for (const item of content) {
+        if (item.type === 'text' && item.text) {
+          const text = item.text.trim();
+          // Skip system metadata - look for actual user text
+          if (!/^<(ide_|system-|user-|command-)/.test(text)) {
+            return text;
+          }
+        }
+      }
+
+      // If all parts are system messages, return empty
+      return '';
+    }
+
+    return '';
+  }
+
+  /**
+   * Check if conversation has any real (non-sidechain) content
+   * Claude Code hides warmup-only conversations, so we should too
    */
   static hasRealMessages(filePath: string): boolean {
     try {
       const messages = FileOperations.parseConversation(filePath);
 
-      // Look for ANY non-system message, including sidechain (warmup)
-      for (const message of messages) {
+      // Look for any NON-SIDECHAIN message that isn't system metadata
+      for (const line of messages) {
         // Skip metadata
-        if ('_metadata' in message) {
+        if ('_metadata' in line) {
+          continue;
+        }
+
+        // Skip summary messages
+        if (!FileOperations.isConversationMessage(line)) {
+          continue;
+        }
+
+        // Skip sidechain (warmup) messages - Claude Code doesn't count these
+        if (line.isSidechain) {
           continue;
         }
 
         // Get content
-        const content = message.message?.content;
+        const content = line.message?.content;
         if (!content) {
           continue;
         }
@@ -162,7 +225,7 @@ export class FileOperations {
           continue;
         }
 
-        // Found a message (real or warmup)
+        // Found a real (non-sidechain) message
         return true;
       }
 
@@ -173,9 +236,145 @@ export class FileOperations {
   }
 
   /**
+   * Check if this conversation would be hidden by Claude Code
+   * A conversation is hidden if it contains a summary with leafUuid pointing to another file
+   */
+  static isHiddenInClaudeCode(filePath: string): boolean {
+    try {
+      const messages = FileOperations.parseConversation(filePath);
+      const projectDir = path.dirname(filePath);
+
+      // Look for summary messages with leafUuid in this file
+      for (const message of messages) {
+        if (FileOperations.isSummaryMessage(message)) {
+          const leafUuid = message.leafUuid;
+          if (!leafUuid) {
+            continue;
+          }
+
+          // Check if this leafUuid points to a message in THIS file
+          const hasLocalMessage = messages.some(m => 'uuid' in m && m.uuid === leafUuid);
+
+          if (hasLocalMessage) {
+            // leafUuid points to a message in this file, so it's shown
+            continue;
+          }
+
+          // leafUuid points to a different file - this conversation is hidden by Claude Code
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Find cross-file summary that references this conversation via leafUuid
+   * Claude Code uses leafUuid to link summary messages across session files
+   */
+  private static findCrossFileSummary(filePath: string): string | null {
+    try {
+      // Get all message UUIDs from this file
+      const messages = FileOperations.parseConversation(filePath);
+      const messageUuids = new Set<string>();
+      for (const message of messages) {
+        if ('uuid' in message && message.uuid) {
+          messageUuids.add(message.uuid);
+        }
+      }
+
+      if (messageUuids.size === 0) {
+        return null;
+      }
+
+      // Get project directory (parent of this file)
+      const projectDir = path.dirname(filePath);
+
+      // Search all other .jsonl files in the same project directory
+      const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl'));
+
+      for (const file of files) {
+        // Skip the current file
+        if (file === path.basename(filePath)) {
+          continue;
+        }
+
+        const otherFilePath = path.join(projectDir, file);
+
+        try {
+          const otherMessages = FileOperations.parseConversation(otherFilePath);
+
+          // Look for summary messages with leafUuid pointing to our messages
+          for (const message of otherMessages) {
+            if (FileOperations.isSummaryMessage(message)) {
+              const leafUuid = message.leafUuid;
+              if (leafUuid && messageUuids.has(leafUuid)) {
+                const summary = message.summary;
+                // Skip warmup/initialization summaries
+                if (!/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+                  console.log(`[FileOperations] Found cross-file summary in ${file}: "${summary}"`);
+                  return summary;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Skip files that can't be parsed
+          continue;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.log('[FileOperations] Error in cross-file summary lookup:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get conversation title from file
+   * Priority:
+   * 1. Cross-file summary (leafUuid pointing to this file's messages)
+   * 2. Local summary (in this file)
+   * 3. First user message
+   * This matches Claude Code's title display behavior
    */
   static getConversationTitle(filePath: string): string {
+    // Priority 1: Check for cross-file summary (leafUuid mechanism)
+    try {
+      const crossFileSummary = FileOperations.findCrossFileSummary(filePath);
+      if (crossFileSummary) {
+        return crossFileSummary;
+      }
+    } catch (error) {
+      console.log('[FileOperations] Error checking cross-file summary:', error);
+    }
+
+    // Priority 2: Check for local summary field
+    try {
+      const messages = FileOperations.parseConversation(filePath);
+
+      // Check for summary field - use FIRST non-warmup summary found
+      // (not last, since earlier summaries are more representative of conversation start)
+      for (const message of messages) {
+        if (FileOperations.isSummaryMessage(message)) {
+          const summary = message.summary;
+          // Skip warmup/initialization summaries - Claude Code filters these
+          if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+            continue;
+          }
+          // Found a valid summary
+          return summary;
+        }
+      }
+    } catch (error) {
+      console.log('[FileOperations] Error checking for summary:', error);
+    }
+
+    // Priority 3: Fallback to first user message
     const firstMessage = FileOperations.getFirstUserMessage(filePath);
 
     if (!firstMessage) {
@@ -183,25 +382,14 @@ export class FileOperations {
       return 'Untitled';
     }
 
-    const content = firstMessage.message.content;
-    console.log('[FileOperations] Content type:', typeof content, 'Content:', JSON.stringify(content).substring(0, 100));
+    const text = FileOperations.extractText(firstMessage);
 
-    // Handle string content
-    if (typeof content === 'string') {
-      return content.split('\n')[0].substring(0, 100);
+    if (!text) {
+      console.log('[FileOperations] Could not extract title from content');
+      return 'Untitled';
     }
 
-    // Handle array content
-    if (Array.isArray(content)) {
-      for (const item of content) {
-        if (item.type === 'text' && item.text) {
-          return item.text.split('\n')[0].substring(0, 100);
-        }
-      }
-    }
-
-    console.log('[FileOperations] Could not extract title from content');
-    return 'Untitled';
+    return text.split('\n')[0].substring(0, 100);
   }
 
   /**
@@ -563,13 +751,18 @@ export class FileOperations {
       try {
         const messages = FileOperations.parseConversation(conversation.filePath);
 
-        for (const message of messages) {
-          // Skip metadata and sidechain
-          if ('_metadata' in message || message.isSidechain) {
+        for (const line of messages) {
+          // Skip metadata and non-conversation messages
+          if ('_metadata' in line || !FileOperations.isConversationMessage(line)) {
             continue;
           }
 
-          const content = message.message.content;
+          // Skip sidechain
+          if (line.isSidechain) {
+            continue;
+          }
+
+          const content = line.message.content;
           let textContent = '';
 
           if (typeof content === 'string') {
@@ -593,7 +786,7 @@ export class FileOperations {
             if (start > 0) snippet = '...' + snippet;
             if (end < textContent.length) snippet = snippet + '...';
 
-            matches.push(`${message.type === 'user' ? '👤' : '🤖'}: ${snippet}`);
+            matches.push(`${line.type === 'user' ? '👤' : '🤖'}: ${snippet}`);
 
             // Limit matches per conversation
             if (matches.length >= 5) break;
@@ -622,16 +815,21 @@ export class FileOperations {
     markdown += `*Exported from Claude Code on ${new Date().toLocaleString()}*\n\n`;
     markdown += '---\n\n';
 
-    for (const message of messages) {
-      // Skip metadata and sidechain messages
-      if ('_metadata' in message || message.isSidechain) {
+    for (const line of messages) {
+      // Skip metadata and non-conversation messages
+      if ('_metadata' in line || !FileOperations.isConversationMessage(line)) {
         continue;
       }
 
-      const role = message.type === 'user' ? '👤 User' : '🤖 Assistant';
+      // Skip sidechain messages
+      if (line.isSidechain) {
+        continue;
+      }
+
+      const role = line.type === 'user' ? '👤 User' : '🤖 Assistant';
       markdown += `## ${role}\n\n`;
 
-      const content = message.message.content;
+      const content = line.message.content;
 
       if (typeof content === 'string') {
         markdown += `${content}\n\n`;

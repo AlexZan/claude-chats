@@ -19,6 +19,14 @@ export interface ConversationMessage {
   userType?: string;
 }
 
+export interface SummaryMessage {
+  type: 'summary';
+  summary: string;
+  leafUuid: string;
+}
+
+export type ConversationLine = ConversationMessage | SummaryMessage;
+
 export interface MessageContent {
   type: string;
   text?: string;

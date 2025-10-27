@@ -17,6 +17,18 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(treeView);
 
+  // Command: Open conversation file when clicked
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'claudeCodeConversationManager.openConversation',
+      async (conversation: any) => {
+        const uri = vscode.Uri.file(conversation.filePath);
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document);
+      }
+    )
+  );
+
   // Command: Refresh conversations
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeCodeConversationManager.refreshConversations', () => {

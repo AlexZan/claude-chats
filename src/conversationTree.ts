@@ -13,33 +13,53 @@ export class ConversationTreeItem extends vscode.TreeItem {
   ) {
     super(conversation.title, collapsibleState);
 
-    this.tooltip = this.buildTooltip();
-    this.description = this.buildDescription();
+    // Check if this conversation is hidden by Claude Code
+    const isHidden = FileOperations.isHiddenInClaudeCode(conversation.filePath);
+
+    this.tooltip = this.buildTooltip(isHidden);
+    this.description = this.buildDescription(isHidden);
     this.contextValue = conversation.isArchived ? 'archivedConversation' : 'conversation';
+
+    // Use different icon for hidden conversations
     this.iconPath = new vscode.ThemeIcon(
-      conversation.isArchived ? 'archive' : 'comment-discussion'
+      conversation.isArchived ? 'archive' :
+      isHidden ? 'eye-closed' : 'comment-discussion'
     );
+
+    // Make the item clickable - opens the conversation file when clicked
+    this.command = {
+      command: 'claudeCodeConversationManager.openConversation',
+      title: 'Open Conversation',
+      arguments: [this.conversation]
+    };
   }
 
-  private buildTooltip(): string {
+  private buildTooltip(isHidden: boolean): string {
     const { conversation } = this;
     const size = this.formatFileSize(conversation.fileSize);
     const date = conversation.lastModified.toLocaleString();
 
-    return [
+    const lines = [
       `Title: ${conversation.title}`,
       `Project: ${conversation.project}`,
       `Messages: ${conversation.messageCount}`,
       `Size: ${size}`,
       `Modified: ${date}`,
       `Path: ${conversation.filePath}`
-    ].join('\n');
+    ];
+
+    if (isHidden) {
+      lines.push('', 'ℹ️ Hidden in Claude Code (linked to another conversation)');
+    }
+
+    return lines.join('\n');
   }
 
-  private buildDescription(): string {
+  private buildDescription(isHidden: boolean): string {
     const { conversation } = this;
     const relativeTime = this.getRelativeTime(conversation.lastModified);
-    return `${conversation.messageCount} msgs • ${relativeTime}`;
+    const hiddenIndicator = isHidden ? '👁️‍🗨️ ' : '';
+    return `${hiddenIndicator}${conversation.messageCount} msgs • ${relativeTime}`;
   }
 
   private getRelativeTime(date: Date): string {

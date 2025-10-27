@@ -17,7 +17,21 @@
       "Bash(__NEW_LINE__ head -1 \"$f\")",
       "Bash(__NEW_LINE__ break)",
       "Bash(__NEW_LINE__ fi)",
-      "Bash(__NEW_LINE__ done)"
+      "Bash(__NEW_LINE__ done)",
+      "Bash(npx jest:*)",
+      "Bash(while read f)",
+      "Bash(do echo \"File: $f\" head -100 \"$f\")",
+      "Bash(for f in ~/.claude/projects/_archive/d--Dev-AgentRoundTableCLI/*.jsonl)",
+      "Bash(for f in b34b99dd-471b-42d0-a959-03fe9bfe2c95 5836f3f1-10be-4366-9462-f4cee2fa7dcc e3fb68c4-f3af-4a9e-b09a-ec87ffeb113a 8d387cb0-9314-4ce5-b57b-5ea2d42b4a41)",
+      "Bash(do echo \"=== $f ===\")",
+      "Read(//c/Users/Lex/.claude/**)",
+      "Bash(for file in C:/Users/Lex/.claude/projects/d--Dev-TaskTick/*.jsonl)",
+      "Bash(do if grep -q \"6af9a0cc-8143-4d71-96a6-51e5104298c0\" \"$file\")",
+      "Bash(fi)",
+      "Read(//d/Dev/TaskTick/**)",
+      "Bash(claude --resume)",
+      "Bash(timeout 5 claude:*)",
+      "Bash(claude:*)"
     ],
     "deny": [],
     "ask": []
