@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { FileOperations } from './fileOperations';
 import { ConversationMessage } from './types';
-import * as path from 'path';
 
 /**
  * Manages the conversation viewer webview panel
@@ -9,13 +8,11 @@ import * as path from 'path';
 export class ConversationViewer {
   private static currentPanel: ConversationViewer | undefined;
   private readonly panel: vscode.WebviewPanel;
-  private readonly extensionUri: vscode.Uri;
   private conversationPath: string;
   private disposables: vscode.Disposable[] = [];
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, conversationPath: string) {
+  private constructor(panel: vscode.WebviewPanel, conversationPath: string) {
     this.panel = panel;
-    this.extensionUri = extensionUri;
     this.conversationPath = conversationPath;
 
     // Set the webview's initial html content
@@ -44,9 +41,12 @@ export class ConversationViewer {
   public static show(extensionUri: vscode.Uri, conversationPath: string) {
     const column = vscode.ViewColumn.One;
 
-    // If we already have a panel, show it
+    // If we already have a panel, reuse it
     if (ConversationViewer.currentPanel) {
       ConversationViewer.currentPanel.conversationPath = conversationPath;
+      // Update the panel title to match the new conversation
+      const newTitle = FileOperations.getConversationTitle(conversationPath);
+      ConversationViewer.currentPanel.panel.title = `📖 ${newTitle}`;
       ConversationViewer.currentPanel.panel.reveal(column);
       ConversationViewer.currentPanel.update();
       return;
@@ -65,7 +65,7 @@ export class ConversationViewer {
       }
     );
 
-    ConversationViewer.currentPanel = new ConversationViewer(panel, extensionUri, conversationPath);
+    ConversationViewer.currentPanel = new ConversationViewer(panel, conversationPath);
   }
 
   /**
@@ -94,14 +94,13 @@ export class ConversationViewer {
    * Update the webview content
    */
   private update() {
-    const webview = this.panel.webview;
-    this.panel.webview.html = this.getHtmlForWebview(webview);
+    this.panel.webview.html = this.getHtmlForWebview();
   }
 
   /**
    * Generate the HTML content for the webview
    */
-  private getHtmlForWebview(webview: vscode.Webview): string {
+  private getHtmlForWebview(): string {
     // Parse conversation
     const messages = FileOperations.parseConversation(this.conversationPath);
     const title = FileOperations.getConversationTitle(this.conversationPath);
