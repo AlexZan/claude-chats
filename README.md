@@ -21,7 +21,10 @@ After discovering that Claude Code validates `leafUuid` references in conversati
 
 ✨ **Real-Time Title Maintenance** - File watcher automatically detects when conversations are modified and updates internal references to keep renamed titles working
 ✨ **Zero Manual Intervention** - Renamed conversations stay renamed, even during active Claude Code sessions
-✨ **Improved Search** - Fast, project-scoped search with visual progress feedback
+✨ **Custom Conversation Viewer** - Beautiful read-only chat viewer with "Save as Markdown" button instead of raw `.jsonl` files
+✨ **Improved Search** - Fast, project-scoped search with visual progress feedback and progress notifications
+✨ **Smart Title Truncation** - Titles in tree view truncate to 60 characters with ellipsis, matching Claude Code's display
+✨ **Responsive Layout** - Viewer adapts perfectly to narrow windows without overlapping elements
 ✨ **Clean Console Output** - Removed verbose logging for better performance
 
 ### Previous Improvements (v0.2.0)
@@ -50,6 +53,14 @@ The journey was challenging - the format uses complex cross-file references, war
 - Uses summary-based renaming with automatic `leafUuid` updates
 - Smart validation prevents naming conflicts
 - Rename directly from tree view or command palette
+
+### 📖 Beautiful Conversation Viewer
+- **Custom chat-like viewer** - Opens instead of raw `.jsonl` files
+- **Read-only design** - Clear "READ ONLY" badge indicates archived conversations
+- **One-click markdown export** - "Save as Markdown" button in header
+- **Message bubbles** - User (blue) and Assistant (green) messages with icons
+- **Theme support** - Automatically adapts to VS Code light/dark themes
+- **Responsive layout** - Works perfectly on narrow windows
 
 ### 📦 Archive & Restore
 - Archive old conversations to keep your workspace clean
