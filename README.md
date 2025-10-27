@@ -55,7 +55,7 @@
 
 ## In Action
 
-![Claude Chats Extension in VS Code](./docs/images/in-action.png)
+![Claude Chats Extension in VS Code](docs/images/in-action.png)
 
 The extension displays your conversations in an organized tree view (left sidebar), grouped by when you last chatted (Today, Yesterday, Past week, etc.). Click any conversation to open it in a beautiful read-only viewer. Your renamed titles persist in Claude Code's native interface (right sidebar), creating a seamless experience across the editor.
 
