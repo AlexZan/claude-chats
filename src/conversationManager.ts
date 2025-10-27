@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { FileOperations } from './fileOperations';
 import { Conversation } from './types';
+import { ConversationViewer } from './conversationViewer';
 
 /**
  * Core business logic for managing conversations
@@ -205,9 +206,8 @@ export class ConversationManager {
     });
 
     if (selected) {
-      // Open the conversation file
-      const doc = await vscode.workspace.openTextDocument(selected.conversation.filePath);
-      await vscode.window.showTextDocument(doc);
+      // Open the conversation in the viewer
+      ConversationViewer.show(this.context.extensionUri, selected.conversation.filePath);
     }
   }
 

@@ -63,9 +63,15 @@ The extension displays your conversations in an organized tree view (left sideba
 
 ### Beautiful Conversation Viewer
 
-![Conversation Viewer](docs/images/viewer.png)
+<img src="docs/images/viewer.png" alt="Conversation Viewer" width="650" />
 
 Click any conversation to open it in a beautiful read-only viewer with message bubbles, syntax highlighting, and a one-click markdown export button. The viewer automatically adapts to your VS Code theme.
+
+### Fast Search
+
+![Claude Chats Extension in VS Code](docs/images/search.png)
+
+Quickly find conversations with full-text search across conversation titles and content. Search results are highlighted and scoped to the current project for fast, relevant results.
 
 ## Why Claude Chats?
 
