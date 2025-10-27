@@ -31,7 +31,8 @@
       "Read(//d/Dev/TaskTick/**)",
       "Bash(claude --resume)",
       "Bash(timeout 5 claude:*)",
-      "Bash(claude:*)"
+      "Bash(claude:*)",
+      "Read(//d/**)"
     ],
     "deny": [],
     "ask": []

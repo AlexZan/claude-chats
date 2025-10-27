@@ -617,6 +617,8 @@ export class FileOperations {
    * without touching the actual conversation content
    */
   static updateConversationTitle(filePath: string, newTitle: string): void {
+    console.log(`[updateConversationTitle] Renaming: ${filePath} to "${newTitle}"`);
+
     // Create backup first
     if (this.shouldCreateBackup()) {
       fs.copyFileSync(filePath, `${filePath}.backup`);
@@ -625,34 +627,40 @@ export class FileOperations {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
 
-    // Find last non-sidechain message UUID for leafUuid
-    const leafUuid = this.findLastNonSidechainMessageUuid(filePath);
-    if (!leafUuid) {
-      throw new Error('Could not find any non-sidechain messages in conversation');
+    // Check if summary already exists first
+    const existingSummaries = this.findSummaryMessages(filePath);
+    console.log(`[updateConversationTitle] Found ${existingSummaries.length} existing summaries`);
+
+    // Find last non-sidechain message UUID for leafUuid (if any in THIS file)
+    let leafUuid = this.findLastNonSidechainMessageUuid(filePath);
+    console.log(`[updateConversationTitle] Found leafUuid in this file: ${leafUuid}`);
+
+    // If no local non-sidechain messages, preserve existing cross-file leafUuid
+    if (!leafUuid && existingSummaries.length > 0) {
+      leafUuid = existingSummaries[0].summary.leafUuid;
+      console.log(`[updateConversationTitle] No local messages, preserving cross-file leafUuid: ${leafUuid}`);
     }
 
-    // Check if summary already exists
-    const existingSummaries = this.findSummaryMessages(filePath);
+    if (!leafUuid) {
+      throw new Error('Could not find any non-sidechain messages in conversation and no existing summary to preserve');
+    }
 
     if (existingSummaries.length > 0) {
-      // Modify the first summary (or the one that matches our leafUuid if possible)
+      // Modify the first summary
       let targetSummary = existingSummaries[0];
+      console.log(`[updateConversationTitle] Existing summary: "${targetSummary.summary.summary}", leafUuid: ${targetSummary.summary.leafUuid}`);
 
-      // Prefer summary with matching leafUuid if it exists
-      const matchingLeaf = existingSummaries.find(s => s.summary.leafUuid === leafUuid);
-      if (matchingLeaf) {
-        targetSummary = matchingLeaf;
-      }
-
-      // Update the summary
+      // Update the summary (preserve leafUuid - either local or cross-file)
       const updatedSummary: SummaryMessage = {
         type: 'summary',
         summary: newTitle,
         leafUuid: leafUuid
       };
 
+      console.log(`[updateConversationTitle] Updating summary at line ${targetSummary.lineIndex} with leafUuid: ${leafUuid}`);
       lines[targetSummary.lineIndex] = JSON.stringify(updatedSummary);
     } else {
+      console.log(`[updateConversationTitle] No existing summary, adding new one`);
       // Add new summary at the beginning (line 0)
       const newSummary: SummaryMessage = {
         type: 'summary',
@@ -666,6 +674,7 @@ export class FileOperations {
 
     // Write back to file
     fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+    console.log(`[updateConversationTitle] Successfully wrote updated file`);
   }
 
   /**
