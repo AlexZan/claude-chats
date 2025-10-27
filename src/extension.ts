@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ConversationTreeProvider, ConversationTreeItem } from './conversationTree';
 import { ConversationManager } from './conversationManager';
+import { ConversationViewer } from './conversationViewer';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Claude Code Conversation Manager activated');
@@ -17,14 +18,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(treeView);
 
-  // Command: Open conversation file when clicked
+  // Command: Open conversation in custom viewer when clicked
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'claudeCodeConversationManager.openConversation',
       async (conversation: any) => {
-        const uri = vscode.Uri.file(conversation.filePath);
-        const document = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(document);
+        ConversationViewer.show(context.extensionUri, conversation.filePath);
       }
     )
   );

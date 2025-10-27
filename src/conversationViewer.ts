@@ -1,0 +1,351 @@
+import * as vscode from 'vscode';
+import { FileOperations } from './fileOperations';
+import { ConversationMessage } from './types';
+import * as path from 'path';
+
+/**
+ * Manages the conversation viewer webview panel
+ */
+export class ConversationViewer {
+  private static currentPanel: ConversationViewer | undefined;
+  private readonly panel: vscode.WebviewPanel;
+  private readonly extensionUri: vscode.Uri;
+  private conversationPath: string;
+  private disposables: vscode.Disposable[] = [];
+
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, conversationPath: string) {
+    this.panel = panel;
+    this.extensionUri = extensionUri;
+    this.conversationPath = conversationPath;
+
+    // Set the webview's initial html content
+    this.update();
+
+    // Listen for when the panel is disposed
+    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+    // Handle messages from the webview
+    this.panel.webview.onDidReceiveMessage(
+      message => {
+        switch (message.command) {
+          case 'saveAsMarkdown':
+            this.saveAsMarkdown();
+            break;
+        }
+      },
+      null,
+      this.disposables
+    );
+  }
+
+  /**
+   * Show the conversation viewer for a given conversation file
+   */
+  public static show(extensionUri: vscode.Uri, conversationPath: string) {
+    const column = vscode.ViewColumn.One;
+
+    // If we already have a panel, show it
+    if (ConversationViewer.currentPanel) {
+      ConversationViewer.currentPanel.conversationPath = conversationPath;
+      ConversationViewer.currentPanel.panel.reveal(column);
+      ConversationViewer.currentPanel.update();
+      return;
+    }
+
+    // Otherwise, create a new panel
+    const title = FileOperations.getConversationTitle(conversationPath);
+    const panel = vscode.window.createWebviewPanel(
+      'claudeConversationViewer',
+      `📖 ${title}`,
+      column,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
+      }
+    );
+
+    ConversationViewer.currentPanel = new ConversationViewer(panel, extensionUri, conversationPath);
+  }
+
+  /**
+   * Save the conversation as markdown
+   */
+  private async saveAsMarkdown() {
+    const markdown = FileOperations.exportToMarkdown(this.conversationPath);
+    const title = FileOperations.getConversationTitle(this.conversationPath);
+
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(`${title}.md`),
+      filters: {
+        'Markdown': ['md']
+      }
+    });
+
+    if (!uri) {
+      return;
+    }
+
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(markdown, 'utf-8'));
+    vscode.window.showInformationMessage(`Saved to: ${uri.fsPath}`);
+  }
+
+  /**
+   * Update the webview content
+   */
+  private update() {
+    const webview = this.panel.webview;
+    this.panel.webview.html = this.getHtmlForWebview(webview);
+  }
+
+  /**
+   * Generate the HTML content for the webview
+   */
+  private getHtmlForWebview(webview: vscode.Webview): string {
+    // Parse conversation
+    const messages = FileOperations.parseConversation(this.conversationPath);
+    const title = FileOperations.getConversationTitle(this.conversationPath);
+
+    // Filter out sidechain/warmup messages
+    const conversationMessages = messages.filter(msg => {
+      if ('_metadata' in msg) return false;
+      if (msg.type !== 'user' && msg.type !== 'assistant') return false;
+      if (msg.isSidechain) return false;
+      return true;
+    }) as ConversationMessage[];
+
+    // Generate message HTML
+    const messagesHtml = conversationMessages.map(msg => this.renderMessage(msg)).join('\n');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body {
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+      background-color: var(--vscode-editor-background);
+      padding: 0;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      background-color: var(--vscode-editorGroupHeader-tabsBackground);
+      border-bottom: 1px solid var(--vscode-panel-border);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .header-title {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .readonly-badge {
+      background-color: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+
+    .save-button {
+      background-color: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      padding: 6px 14px;
+      border-radius: 2px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: var(--vscode-font-family);
+    }
+
+    .save-button:hover {
+      background-color: var(--vscode-button-hoverBackground);
+    }
+
+    .save-button:active {
+      background-color: var(--vscode-button-hoverBackground);
+      transform: translateY(1px);
+    }
+
+    .messages-container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .message {
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .message-role {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--vscode-descriptionForeground);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .message-role.user {
+      color: var(--vscode-textLink-foreground);
+    }
+
+    .message-role.assistant {
+      color: var(--vscode-notebookStatusSuccessIcon-foreground);
+    }
+
+    .message-content {
+      background-color: var(--vscode-editorWidget-background);
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 6px;
+      padding: 16px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .message.user .message-content {
+      border-left: 3px solid var(--vscode-textLink-foreground);
+    }
+
+    .message.assistant .message-content {
+      border-left: 3px solid var(--vscode-notebookStatusSuccessIcon-foreground);
+    }
+
+    code {
+      background-color: var(--vscode-textCodeBlock-background);
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 3px;
+      padding: 2px 4px;
+      font-family: var(--vscode-editor-font-family);
+      font-size: 0.9em;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--vscode-descriptionForeground);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-title">
+      <span>📖 ${this.escapeHtml(title)}</span>
+      <span class="readonly-badge">Read Only</span>
+    </div>
+    <button class="save-button" onclick="saveAsMarkdown()">💾 Save as Markdown</button>
+  </div>
+
+  <div class="messages-container">
+    ${messagesHtml || '<div class="empty-state">No messages in this conversation</div>'}
+  </div>
+
+  <script>
+    const vscode = acquireVsCodeApi();
+
+    function saveAsMarkdown() {
+      vscode.postMessage({
+        command: 'saveAsMarkdown'
+      });
+    }
+  </script>
+</body>
+</html>`;
+  }
+
+  /**
+   * Render a single message
+   */
+  private renderMessage(message: ConversationMessage): string {
+    const role = message.type;
+    const roleLabel = role === 'user' ? '👤 User' : '🤖 Assistant';
+    const content = this.extractContent(message);
+
+    return `
+      <div class="message ${role}">
+        <div class="message-role ${role}">${roleLabel}</div>
+        <div class="message-content">${this.escapeHtml(content)}</div>
+      </div>
+    `;
+  }
+
+  /**
+   * Extract text content from a message
+   */
+  private extractContent(message: ConversationMessage): string {
+    if (!message.message || !message.message.content) {
+      return '';
+    }
+
+    const { content } = message.message;
+
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      return content
+        .map(item => {
+          if (item.type === 'text' && item.text) {
+            return item.text;
+          }
+          if (item.type === 'tool_use') {
+            return `[Tool: ${item.name}]\n${JSON.stringify(item.input, null, 2)}`;
+          }
+          return '';
+        })
+        .filter(text => text.length > 0)
+        .join('\n\n');
+    }
+
+    return '';
+  }
+
+  /**
+   * Escape HTML special characters
+   */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  /**
+   * Dispose of the panel
+   */
+  public dispose() {
+    ConversationViewer.currentPanel = undefined;
+
+    this.panel.dispose();
+
+    while (this.disposables.length) {
+      const disposable = this.disposables.pop();
+      if (disposable) {
+        disposable.dispose();
+      }
+    }
+  }
+}
