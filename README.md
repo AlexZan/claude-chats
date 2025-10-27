@@ -13,7 +13,7 @@
 🎯 **Pixel-Perfect Matching** - Conversations display exactly like Claude Code (same titles, timestamps, sorting)
 🎯 **Plus Full Management** - Archive, organize, and delete conversations too
 
-## Recent Improvements (v0.2.1)
+## Recent Improvements (v0.3.0)
 
 🎉 **Major Update: Renamed Titles Now Persist During Active Conversations!**
 
