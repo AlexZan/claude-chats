@@ -128,7 +128,7 @@
       "activitybar": [
         {
           "id": "claudeCodeConversations",
-          "title": "Claude Conversations",
+          "title": "Claude Chats",
           "icon": "$(comment-discussion)"
         }
       ]
@@ -137,7 +137,7 @@
       "claudeCodeConversations": [
         {
           "id": "claudeCodeConversationTree",
-          "name": "Conversations"
+          "name": "Active"
         }
       ]
     },
