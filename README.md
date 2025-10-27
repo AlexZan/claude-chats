@@ -13,35 +13,6 @@
 🎯 **Pixel-Perfect Matching** - Conversations display exactly like Claude Code (same titles, timestamps, sorting)
 🎯 **Plus Full Management** - Archive, organize, and delete conversations too
 
-## Recent Improvements (v0.4.0)
-
-🎉 **Major Update: Beautiful Conversation Viewer & Persistent Renamed Titles!**
-
-We've released a custom conversation viewer that opens instead of raw `.jsonl` files, plus an intelligent file watcher that automatically maintains your renamed titles during active conversations:
-
-✨ **Custom Conversation Viewer** - Beautiful read-only chat interface with message bubbles, "Save as Markdown" button, and full VS Code theme support
-✨ **Real-Time Title Maintenance** - File watcher automatically detects when conversations are modified and updates internal references to keep renamed titles working
-✨ **Zero Manual Intervention** - Renamed conversations stay renamed, even during active Claude Code sessions
-✨ **Smart Title Truncation** - Titles in tree view truncate to 60 characters with ellipsis, matching Claude Code's display
-✨ **Responsive Layout** - Viewer adapts perfectly to narrow windows without overlapping elements
-✨ **Improved Search** - Fast, project-scoped search with visual progress feedback and progress notifications
-✨ **Clean Console Output** - Removed verbose logging for better performance
-
-### Previous Improvements (v0.3.0)
-
-Renamed titles now persist during active conversations with intelligent file watcher and improved search functionality.
-
-### Earlier Improvements (v0.2.0)
-
-After several days of intensive reverse-engineering of Claude Code's undocumented `.jsonl` format, we achieved perfect parity with Claude Code's native conversation display:
-
-✨ **Accurate Timestamps** - Shows exact same relative times (Today, Yesterday, Past week, etc.)
-✨ **Perfect Sorting** - Conversations appear in identical order to Claude Code's list
-✨ **Smart Title Extraction** - Matches Claude Code's title priority system exactly
-✨ **Clickable Conversations** - Click any conversation to open it directly in Claude Code
-
-The journey was challenging - the format uses complex cross-file references, warmup messages, and subtle timestamp behaviors. Through careful analysis and pixel-by-pixel comparison, we cracked it. While Anthropic works on native features like conversation renaming, Claude Chats delivers these essential tools today.
-
 ## Features
 
 ### 🗂️ Conversation Organization
@@ -81,6 +52,12 @@ The journey was challenging - the format uses complex cross-file references, war
 - **Command Palette** - Access all features via `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
 - **Context Menus** - Right-click conversations for quick actions
 - **Inline Actions** - Rename and archive with one click
+
+## In Action
+
+![Claude Chats Extension in VS Code](./docs/images/in-action.png)
+
+The extension displays your conversations in an organized tree view (left sidebar), grouped by when you last chatted (Today, Yesterday, Past week, etc.). Click any conversation to open it in a beautiful read-only viewer. Your renamed titles persist in Claude Code's native interface (right sidebar), creating a seamless experience across the editor.
 
 ## Why Claude Chats?
 
