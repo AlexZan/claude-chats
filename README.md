@@ -13,21 +13,25 @@
 🎯 **Pixel-Perfect Matching** - Conversations display exactly like Claude Code (same titles, timestamps, sorting)
 🎯 **Plus Full Management** - Archive, organize, and delete conversations too
 
-## Recent Improvements (v0.3.0)
+## Recent Improvements (v0.4.0)
 
-🎉 **Major Update: Renamed Titles Now Persist During Active Conversations!**
+🎉 **Major Update: Beautiful Conversation Viewer & Persistent Renamed Titles!**
 
-After discovering that Claude Code validates `leafUuid` references in conversation summaries, we've implemented an intelligent file watcher that automatically maintains your renamed titles even while you're actively chatting:
+We've released a custom conversation viewer that opens instead of raw `.jsonl` files, plus an intelligent file watcher that automatically maintains your renamed titles during active conversations:
 
+✨ **Custom Conversation Viewer** - Beautiful read-only chat interface with message bubbles, "Save as Markdown" button, and full VS Code theme support
 ✨ **Real-Time Title Maintenance** - File watcher automatically detects when conversations are modified and updates internal references to keep renamed titles working
 ✨ **Zero Manual Intervention** - Renamed conversations stay renamed, even during active Claude Code sessions
-✨ **Custom Conversation Viewer** - Beautiful read-only chat viewer with "Save as Markdown" button instead of raw `.jsonl` files
-✨ **Improved Search** - Fast, project-scoped search with visual progress feedback and progress notifications
 ✨ **Smart Title Truncation** - Titles in tree view truncate to 60 characters with ellipsis, matching Claude Code's display
 ✨ **Responsive Layout** - Viewer adapts perfectly to narrow windows without overlapping elements
+✨ **Improved Search** - Fast, project-scoped search with visual progress feedback and progress notifications
 ✨ **Clean Console Output** - Removed verbose logging for better performance
 
-### Previous Improvements (v0.2.0)
+### Previous Improvements (v0.3.0)
+
+Renamed titles now persist during active conversations with intelligent file watcher and improved search functionality.
+
+### Earlier Improvements (v0.2.0)
 
 After several days of intensive reverse-engineering of Claude Code's undocumented `.jsonl` format, we achieved perfect parity with Claude Code's native conversation display:
 
