@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { FileOperations } from './fileOperations';
 import { ConversationMessage } from './types';
+import { ConversationTreeItem } from './conversationTree';
 
 /**
  * Manages the conversation viewer webview panel
@@ -46,7 +47,8 @@ export class ConversationViewer {
       ConversationViewer.currentPanel.conversationPath = conversationPath;
       // Update the panel title to match the new conversation
       const newTitle = FileOperations.getConversationTitle(conversationPath);
-      ConversationViewer.currentPanel.panel.title = `📖 ${newTitle}`;
+      const truncatedTitle = ConversationTreeItem.truncateTitle(newTitle);
+      ConversationViewer.currentPanel.panel.title = `📖 ${truncatedTitle}`;
       ConversationViewer.currentPanel.panel.reveal(column);
       ConversationViewer.currentPanel.update();
       return;
@@ -54,9 +56,10 @@ export class ConversationViewer {
 
     // Otherwise, create a new panel
     const title = FileOperations.getConversationTitle(conversationPath);
+    const truncatedTitle = ConversationTreeItem.truncateTitle(title);
     const panel = vscode.window.createWebviewPanel(
       'claudeConversationViewer',
-      `📖 ${title}`,
+      `📖 ${truncatedTitle}`,
       column,
       {
         enableScripts: true,

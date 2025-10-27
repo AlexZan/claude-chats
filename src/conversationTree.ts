@@ -56,7 +56,7 @@ export class ConversationTreeItem extends vscode.TreeItem {
    * - Max 60 characters
    * - Add ellipsis if truncated
    */
-  private static truncateTitle(title: string): string {
+  public static truncateTitle(title: string): string {
     const MAX_LENGTH = 60;
 
     // Get first line only
