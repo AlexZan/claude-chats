@@ -9,11 +9,11 @@ export class ConversationManager {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   /**
-   * Rename a conversation
+   * Rename a conversation using summary-based approach
    */
   async rename(conversation: Conversation, newTitle: string): Promise<void> {
     try {
-      FileOperations.updateFirstUserMessage(conversation.filePath, newTitle);
+      FileOperations.updateConversationTitle(conversation.filePath, newTitle);
       vscode.window.showInformationMessage(`Renamed conversation to: ${newTitle}`);
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to rename conversation: ${error}`);
@@ -85,7 +85,7 @@ export class ConversationManager {
   }
 
   /**
-   * Toggle done status (✓ prefix)
+   * Toggle done status (✓ prefix) using summary-based approach
    */
   async toggleDone(conversation: Conversation): Promise<void> {
     try {
@@ -100,7 +100,7 @@ export class ConversationManager {
         newTitle = `✓ ${conversation.title}`;
       }
 
-      FileOperations.updateFirstUserMessage(conversation.filePath, newTitle);
+      FileOperations.updateConversationTitle(conversation.filePath, newTitle);
       vscode.window.showInformationMessage(
         isDone ? `Marked as undone: ${newTitle}` : `Marked as done: ${newTitle}`
       );

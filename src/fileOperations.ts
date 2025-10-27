@@ -554,6 +554,121 @@ export class FileOperations {
   }
 
   /**
+   * Find the last non-sidechain message UUID in a conversation file
+   * This is needed for the leafUuid in summary messages
+   */
+  private static findLastNonSidechainMessageUuid(filePath: string): string | null {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n').filter(line => line.trim());
+
+    // Scan backwards from the end to find last non-sidechain message
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const message = JSON.parse(lines[i]) as ConversationLine;
+
+        // Skip metadata
+        if ('_metadata' in message) {
+          continue;
+        }
+
+        // Check if it's a conversation message (user or assistant)
+        if (this.isConversationMessage(message) && !message.isSidechain && message.uuid) {
+          return message.uuid;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find existing summary messages in a conversation file
+   * Returns array of {lineIndex, summary} objects
+   */
+  private static findSummaryMessages(filePath: string): Array<{lineIndex: number, summary: SummaryMessage}> {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+    const summaries: Array<{lineIndex: number, summary: SummaryMessage}> = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        continue;
+      }
+
+      try {
+        const message = JSON.parse(line) as ConversationLine;
+        if (this.isSummaryMessage(message)) {
+          summaries.push({lineIndex: i, summary: message});
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    return summaries;
+  }
+
+  /**
+   * Update conversation title using summary-based approach (RECOMMENDED)
+   * This method adds or modifies a summary message to change the conversation title
+   * without touching the actual conversation content
+   */
+  static updateConversationTitle(filePath: string, newTitle: string): void {
+    // Create backup first
+    if (this.shouldCreateBackup()) {
+      fs.copyFileSync(filePath, `${filePath}.backup`);
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+
+    // Find last non-sidechain message UUID for leafUuid
+    const leafUuid = this.findLastNonSidechainMessageUuid(filePath);
+    if (!leafUuid) {
+      throw new Error('Could not find any non-sidechain messages in conversation');
+    }
+
+    // Check if summary already exists
+    const existingSummaries = this.findSummaryMessages(filePath);
+
+    if (existingSummaries.length > 0) {
+      // Modify the first summary (or the one that matches our leafUuid if possible)
+      let targetSummary = existingSummaries[0];
+
+      // Prefer summary with matching leafUuid if it exists
+      const matchingLeaf = existingSummaries.find(s => s.summary.leafUuid === leafUuid);
+      if (matchingLeaf) {
+        targetSummary = matchingLeaf;
+      }
+
+      // Update the summary
+      const updatedSummary: SummaryMessage = {
+        type: 'summary',
+        summary: newTitle,
+        leafUuid: leafUuid
+      };
+
+      lines[targetSummary.lineIndex] = JSON.stringify(updatedSummary);
+    } else {
+      // Add new summary at the beginning (line 0)
+      const newSummary: SummaryMessage = {
+        type: 'summary',
+        summary: newTitle,
+        leafUuid: leafUuid
+      };
+
+      // Insert at beginning
+      lines.unshift(JSON.stringify(newSummary));
+    }
+
+    // Write back to file
+    fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+  }
+
+  /**
    * Get current project name from workspace path
    */
   static getCurrentProjectName(): string | null {
