@@ -72,6 +72,11 @@ export class FileOperations {
         continue;
       }
 
+      // Skip warmup/initialization messages - look for actual conversation content
+      if (/^warmup$/i.test(text.trim())) {
+        continue;
+      }
+
       return line; // Found the first real user message
     }
 
@@ -178,14 +183,14 @@ export class FileOperations {
   }
 
   /**
-   * Check if conversation has any real (non-sidechain) content
-   * Claude Code hides warmup-only conversations, so we should too
+   * Check if conversation has any real (non-sidechain) user messages
+   * Filters out warmup-only conversations that the user never actually started
    */
   static hasRealMessages(filePath: string): boolean {
     try {
       const messages = FileOperations.parseConversation(filePath);
 
-      // Look for any NON-SIDECHAIN message that isn't system metadata
+      // Look for any NON-SIDECHAIN user message that isn't just "warmup"
       for (const line of messages) {
         // Skip metadata
         if ('_metadata' in line) {
@@ -197,8 +202,13 @@ export class FileOperations {
           continue;
         }
 
-        // Skip sidechain (warmup) messages - Claude Code doesn't count these
+        // Skip sidechain messages (warmup/initialization)
         if (line.isSidechain) {
+          continue;
+        }
+
+        // Only look for user messages
+        if (line.type !== 'user') {
           continue;
         }
 
@@ -273,9 +283,9 @@ export class FileOperations {
 
   /**
    * Find cross-file summary that references this conversation via leafUuid
-   * Claude Code uses leafUuid to link summary messages across session files
+   * Returns both the summary text and the leafUuid
    */
-  private static findCrossFileSummary(filePath: string): string | null {
+  private static findCrossFileSummaryWithUuid(filePath: string): { summary: string; leafUuid: string } | null {
     try {
       // Get all message UUIDs from this file
       const messages = FileOperations.parseConversation(filePath);
@@ -316,7 +326,7 @@ export class FileOperations {
                 // Skip warmup/initialization summaries
                 if (!/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
                   console.log(`[FileOperations] Found cross-file summary in ${file}: "${summary}"`);
-                  return summary;
+                  return { summary, leafUuid };
                 }
               }
             }
@@ -332,6 +342,15 @@ export class FileOperations {
       console.log('[FileOperations] Error in cross-file summary lookup:', error);
       return null;
     }
+  }
+
+  /**
+   * Find cross-file summary that references this conversation via leafUuid
+   * Claude Code uses leafUuid to link summary messages across session files
+   */
+  private static findCrossFileSummary(filePath: string): string | null {
+    const result = FileOperations.findCrossFileSummaryWithUuid(filePath);
+    return result ? result.summary : null;
   }
 
   /**
@@ -357,16 +376,33 @@ export class FileOperations {
     try {
       const messages = FileOperations.parseConversation(filePath);
 
-      // Check for summary field - use FIRST non-warmup summary found
-      // (not last, since earlier summaries are more representative of conversation start)
+      // Get all message UUIDs in THIS file
+      const messageUuids = new Set<string>();
+      for (const message of messages) {
+        if ('uuid' in message && message.uuid) {
+          messageUuids.add(message.uuid);
+        }
+      }
+
+      // Check for summary field - use FIRST non-warmup summary whose leafUuid points to THIS file
       for (const message of messages) {
         if (FileOperations.isSummaryMessage(message)) {
           const summary = message.summary;
+          const leafUuid = message.leafUuid;
+
           // Skip warmup/initialization summaries - Claude Code filters these
           if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
             continue;
           }
-          // Found a valid summary
+
+          // Only use summaries whose leafUuid points to a message in THIS file
+          // Summaries pointing to other files are for those other conversations
+          if (leafUuid && !messageUuids.has(leafUuid)) {
+            console.log(`[FileOperations] Skipping summary that points to another file: "${summary.substring(0, 50)}"`);
+            continue;
+          }
+
+          // Found a valid local summary
           return summary;
         }
       }
@@ -594,12 +630,42 @@ export class FileOperations {
           const title = FileOperations.getConversationTitle(filePath);
           console.log('[FileOperations] Found conversation:', title, 'from file:', file);
 
+          // Get conversation timestamp (matches Claude Code behavior)
+          // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
+          // Priority 2: Use the first user message timestamp (the title message)
+          // Priority 3: Fall back to file mtime
+          let lastMessageTime = stats.mtime;
+
+          const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
+          if (crossFileSummary) {
+            // Find the message with this UUID to get its timestamp
+            const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
+            if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
+              lastMessageTime = new Date(leafMessage.timestamp);
+              console.log('[FileOperations] Using leafUuid message timestamp:', lastMessageTime.toISOString());
+            }
+          } else {
+            // No cross-file summary, use FIRST user message timestamp
+            const firstUserMessage = FileOperations.getFirstUserMessage(filePath);
+            if (firstUserMessage && 'timestamp' in firstUserMessage && firstUserMessage.timestamp) {
+              lastMessageTime = new Date(firstUserMessage.timestamp);
+              console.log('[FileOperations] Using first user message timestamp:', lastMessageTime.toISOString());
+            } else if (messages.length > 0) {
+              // Fallback to last message if no first user message found
+              const lastMsg = messages[messages.length - 1];
+              if ('timestamp' in lastMsg && lastMsg.timestamp) {
+                lastMessageTime = new Date(lastMsg.timestamp);
+              }
+            }
+          }
+
           conversations.push({
             id: path.parse(file).name,
             title,
             filePath,
             project: projectDir,
             lastModified: stats.mtime,
+            lastMessageTime: lastMessageTime,
             messageCount: messages.length,
             fileSize: stats.size,
             isArchived: false
@@ -658,12 +724,42 @@ export class FileOperations {
           const title = FileOperations.getConversationTitle(filePath);
           console.log('[FileOperations] Found conversation:', title, 'from file:', file);
 
+          // Get conversation timestamp (matches Claude Code behavior)
+          // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
+          // Priority 2: Use the first user message timestamp (the title message)
+          // Priority 3: Fall back to file mtime
+          let lastMessageTime = stats.mtime;
+
+          const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
+          if (crossFileSummary) {
+            // Find the message with this UUID to get its timestamp
+            const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
+            if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
+              lastMessageTime = new Date(leafMessage.timestamp);
+              console.log('[FileOperations] Using leafUuid message timestamp:', lastMessageTime.toISOString());
+            }
+          } else {
+            // No cross-file summary, use FIRST user message timestamp
+            const firstUserMessage = FileOperations.getFirstUserMessage(filePath);
+            if (firstUserMessage && 'timestamp' in firstUserMessage && firstUserMessage.timestamp) {
+              lastMessageTime = new Date(firstUserMessage.timestamp);
+              console.log('[FileOperations] Using first user message timestamp:', lastMessageTime.toISOString());
+            } else if (messages.length > 0) {
+              // Fallback to last message if no first user message found
+              const lastMsg = messages[messages.length - 1];
+              if ('timestamp' in lastMsg && lastMsg.timestamp) {
+                lastMessageTime = new Date(lastMsg.timestamp);
+              }
+            }
+          }
+
           conversations.push({
             id: path.parse(file).name,
             title,
             filePath,
             project: projectDir,
             lastModified: stats.mtime,
+            lastMessageTime: lastMessageTime,
             messageCount: messages.length,
             fileSize: stats.size,
             isArchived: true

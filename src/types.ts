@@ -39,6 +39,7 @@ export interface Conversation {
   filePath: string;
   project: string;
   lastModified: Date;
+  lastMessageTime: Date; // Timestamp of the last message in the conversation
   messageCount: number;
   fileSize: number;
   isArchived: boolean;

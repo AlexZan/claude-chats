@@ -4,6 +4,20 @@ import { Conversation } from './types';
 import { FileOperations } from './fileOperations';
 
 /**
+ * Tree item representing a time group (Today, Yesterday, etc.)
+ */
+export class TimeGroupTreeItem extends vscode.TreeItem {
+  constructor(
+    public readonly label: string,
+    public readonly conversations: Conversation[]
+  ) {
+    super(label, vscode.TreeItemCollapsibleState.Expanded);
+    this.contextValue = 'timeGroup';
+    // No icon - matches Claude Code style
+  }
+}
+
+/**
  * Tree item representing a conversation
  */
 export class ConversationTreeItem extends vscode.TreeItem {
@@ -117,6 +131,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     this._onDidChangeTreeData.event;
 
   private sortOrder: 'newest' | 'oldest' = 'newest';
+  private showWarmupOnly: boolean = false;
 
   constructor() {}
 
@@ -127,6 +142,15 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
 
   getSortOrder(): string {
     return this.sortOrder === 'newest' ? 'Newest First' : 'Oldest First';
+  }
+
+  toggleWarmupFilter(): void {
+    this.showWarmupOnly = !this.showWarmupOnly;
+    this.refresh();
+  }
+
+  getWarmupFilterStatus(): string {
+    return this.showWarmupOnly ? 'Showing Warmup Conversations' : 'Hiding Warmup Conversations';
   }
 
   refresh(): void {
@@ -154,6 +178,12 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
       return this.getArchivedConversationItems();
     }
 
+    if (element instanceof TimeGroupTreeItem) {
+      return element.conversations.map(
+        conv => new ConversationTreeItem(conv, vscode.TreeItemCollapsibleState.None)
+      );
+    }
+
     if (element instanceof ProjectTreeItem) {
       return element.conversations.map(
         conv => new ConversationTreeItem(conv, vscode.TreeItemCollapsibleState.None)
@@ -167,26 +197,76 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
     const showEmpty = config.get<boolean>('showEmptyConversations', false);
 
-    const conversations = FileOperations.getAllConversations(true, showEmpty);
+    // Get all conversations, then filter based on warmup filter
+    const allConversations = FileOperations.getAllConversations(true, true);
 
-    // Sort by last modified based on sort order
-    if (this.sortOrder === 'newest') {
-      conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
-    } else {
-      conversations.sort((a, b) => a.lastModified.getTime() - b.lastModified.getTime());
+    // Filter out warmup-only conversations unless user wants to see them
+    const conversations = this.showWarmupOnly
+      ? allConversations
+      : allConversations.filter(conv => showEmpty || FileOperations.hasRealMessages(conv.filePath));
+
+    // Sort by last message time (always newest first for grouping)
+    conversations.sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
+
+    // Group by time periods
+    const timeGroups = this.groupByTimePeriod(conversations);
+
+    // Convert to tree items
+    const items: vscode.TreeItem[] = [];
+    for (const [label, convos] of timeGroups) {
+      if (convos.length > 0) {
+        items.push(new TimeGroupTreeItem(label, convos));
+      }
     }
 
-    // Return conversation items directly (no project grouping)
-    return conversations.map(
-      conv => new ConversationTreeItem(conv, vscode.TreeItemCollapsibleState.None)
-    );
+    return items;
+  }
+
+  private groupByTimePeriod(conversations: Conversation[]): Map<string, Conversation[]> {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+    const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const groups = new Map<string, Conversation[]>([
+      ['Today', []],
+      ['Yesterday', []],
+      ['Past week', []],
+      ['Past month', []],
+      ['Older', []]
+    ]);
+
+    for (const conv of conversations) {
+      const time = conv.lastMessageTime;
+
+      if (time >= todayStart) {
+        groups.get('Today')!.push(conv);
+      } else if (time >= yesterdayStart) {
+        groups.get('Yesterday')!.push(conv);
+      } else if (time >= weekStart) {
+        groups.get('Past week')!.push(conv);
+      } else if (time >= monthStart) {
+        groups.get('Past month')!.push(conv);
+      } else {
+        groups.get('Older')!.push(conv);
+      }
+    }
+
+    return groups;
   }
 
   private async getArchivedConversationItems(): Promise<vscode.TreeItem[]> {
     const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
     const showEmpty = config.get<boolean>('showEmptyConversations', false);
 
-    const conversations = FileOperations.getArchivedConversations(true, showEmpty);
+    // Get all conversations, then filter based on warmup filter
+    const allConversations = FileOperations.getArchivedConversations(true, true);
+
+    // Filter out warmup-only conversations unless user wants to see them
+    const conversations = this.showWarmupOnly
+      ? allConversations
+      : allConversations.filter(conv => showEmpty || FileOperations.hasRealMessages(conv.filePath));
 
     if (conversations.length === 0) {
       const item = new vscode.TreeItem('No archived conversations', vscode.TreeItemCollapsibleState.None);
@@ -194,17 +274,21 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
       return [item];
     }
 
-    // Sort by last modified based on sort order
-    if (this.sortOrder === 'newest') {
-      conversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
-    } else {
-      conversations.sort((a, b) => a.lastModified.getTime() - b.lastModified.getTime());
+    // Sort by last message time (always newest first for grouping)
+    conversations.sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
+
+    // Group by time periods
+    const timeGroups = this.groupByTimePeriod(conversations);
+
+    // Convert to tree items
+    const items: vscode.TreeItem[] = [];
+    for (const [label, convos] of timeGroups) {
+      if (convos.length > 0) {
+        items.push(new TimeGroupTreeItem(label, convos));
+      }
     }
 
-    // Return conversation items directly (no project grouping)
-    return conversations.map(
-      conv => new ConversationTreeItem(conv, vscode.TreeItemCollapsibleState.None)
-    );
+    return items;
   }
 
   private groupConversationsByProject(conversations: Conversation[]): Map<string, Conversation[]> {

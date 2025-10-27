@@ -59,6 +59,14 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Command: Toggle warmup-only conversations filter
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeCodeConversationManager.toggleWarmupFilter', () => {
+      treeProvider.toggleWarmupFilter();
+      vscode.window.showInformationMessage(treeProvider.getWarmupFilterStatus());
+    })
+  );
+
   // Command: Rename conversation (from tree view)
   context.subscriptions.push(
     vscode.commands.registerCommand(
