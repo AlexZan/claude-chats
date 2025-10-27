@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(do grep -l '\"\"leafUuid\"\":\"\"7ccb782a-e0eb-4ed6-b856-053dcfea4b88\"\"' \"$f\")"
-    ],
-    "deny": [],
-    "ask": []
-  }
-}
