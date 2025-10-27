@@ -4,11 +4,22 @@
 **Project:** Claude Code Conversation Manager
 **Context:** Research from troubleshooting broken rename scripts
 
+> **🎉 UPDATE (October 27, 2025):** A **better method** has been discovered! Conversations can be renamed using **summary messages** instead of modifying user message content. This approach is:
+> - ✅ Non-invasive (doesn't modify conversation content)
+> - ✅ Persistent (Claude Code doesn't overwrite)
+> - ✅ Cleaner (dedicated metadata field)
+>
+> **See [FINDINGS.md Section 7](FINDINGS.md#7-summary-based-conversation-renaming) for the new recommended approach.**
+>
+> The information below documents the older message-modification approaches, which are now considered legacy/fallback methods.
+
 ---
 
 ## Executive Summary
 
 Through debugging broken chat management scripts, we discovered the **correct and incorrect** ways to rename Claude Code conversations. The key insight: **you cannot insert orphaned messages** (`parentUuid: null`) without breaking VS Code's conversation tracking. However, the **current working solution has a trade-off** - it loses the original first message content.
+
+**UPDATE:** The summary-based approach (discovered Oct 27, 2025) eliminates this trade-off entirely.
 
 ---
 

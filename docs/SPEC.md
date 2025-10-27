@@ -4,6 +4,8 @@
 
 A VS Code extension for managing Claude Code conversations, providing renaming, archiving, and organization capabilities outside of the conversation context.
 
+> **🎉 Major Discovery (October 2025):** Conversations can be renamed using summary messages! This provides a cleaner, safer method than modifying conversation content. See [Section 7 in FINDINGS.md](FINDINGS.md#7-summary-based-conversation-renaming) for technical details.
+
 ## The Problem
 
 ### Current State: Broken In-Conversation Management
@@ -215,6 +217,13 @@ class FileOperations {
   // Parse .jsonl conversation files
   parseConversation(file: string): Conversation
   getFirstUserMessage(conversation: Conversation): Message
+
+  // Summary-based renaming (RECOMMENDED - discovered Oct 2025)
+  updateSummary(file: string, newTitle: string): void
+  addSummary(file: string, newTitle: string, leafUuid: string): void
+  getSummaryMessages(file: string): SummaryMessage[]
+
+  // Legacy: First user message modification (fallback only)
   updateFirstUserMessage(file: string, newContent: string): void
 
   // Safe move operations
@@ -228,10 +237,13 @@ class FileOperations {
 
 **Conversation File Format** (`.jsonl`)
 ```jsonl
-{"type":"user","isSidechain":false,"message":{"role":"user","content":"Original Title"},...}
+{"type":"summary","summary":"Conversation Title","leafUuid":"uuid-of-last-message"}
+{"type":"user","isSidechain":false,"message":{"role":"user","content":"First message"},...}
 {"type":"assistant","message":{"role":"assistant","content":"..."},...}
 {"type":"user","message":{"role":"user","content":"..."},...}
 ```
+
+**Note:** Summary messages are optional but recommended for custom titles. Claude Code uses them for conversation display. See [FINDINGS.md](FINDINGS.md#7-summary-based-conversation-renaming) for details.
 
 **Metadata** (optional: `.claude/conversations.json`)
 ```json
@@ -255,9 +267,18 @@ class FileOperations {
 2. Selects "Rename Conversation"
 3. Input box appears with current title
 4. User types new title, presses Enter
-5. Extension updates first user message
-6. Tree view refreshes to show new title
+5. Extension updates conversation title using **summary-based approach**:
+   - If summary exists: Modify existing `summary` field
+   - If no summary: Add new summary message at beginning of file
+   - leafUuid points to last non-sidechain message UUID
+6. Tree view refreshes to show new title (immediate, no reload needed)
 7. If conversation is open, VS Code updates tab title
+
+**Technical Note:** Summary-based renaming (discovered Oct 2025) is the preferred method as it:
+- Doesn't modify conversation content
+- Persists reliably (Claude Code doesn't overwrite)
+- Works whether summary exists or not
+- See [FINDINGS.md](FINDINGS.md#7-summary-based-conversation-renaming)
 
 #### Archive Flow
 1. User right-clicks conversation in tree view
@@ -328,7 +349,7 @@ class FileOperations {
 - [x] TypeScript types and interfaces (types.ts)
 - [x] Basic tree view of active conversations
 - [x] Tree view with project grouping
-- [x] Rename conversation (modify first user message)
+- [x] Rename conversation (summary-based approach - Oct 2025 discovery)
 - [x] Archive conversation (move to _archive folder)
 - [x] Command palette integration
 - [x] Context menu actions (right-click)
