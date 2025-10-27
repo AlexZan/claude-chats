@@ -25,7 +25,9 @@ export class ConversationTreeItem extends vscode.TreeItem {
     public readonly conversation: Conversation,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState
   ) {
-    super(conversation.title, collapsibleState);
+    // Truncate title: first line only, max 60 characters with ellipsis
+    const displayTitle = ConversationTreeItem.truncateTitle(conversation.title);
+    super(displayTitle, collapsibleState);
 
     // Check if this conversation is hidden by Claude Code
     const isHidden = FileOperations.isHiddenInClaudeCode(conversation.filePath);
@@ -46,6 +48,26 @@ export class ConversationTreeItem extends vscode.TreeItem {
       title: 'Open Conversation',
       arguments: [this.conversation]
     };
+  }
+
+  /**
+   * Truncate title to match Claude Code's display format
+   * - First line only (no newlines)
+   * - Max 60 characters
+   * - Add ellipsis if truncated
+   */
+  private static truncateTitle(title: string): string {
+    const MAX_LENGTH = 60;
+
+    // Get first line only
+    const firstLine = title.split('\n')[0];
+
+    // Truncate if too long
+    if (firstLine.length > MAX_LENGTH) {
+      return firstLine.substring(0, MAX_LENGTH) + '...';
+    }
+
+    return firstLine;
   }
 
   private buildTooltip(isHidden: boolean): string {
