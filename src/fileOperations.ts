@@ -336,7 +336,6 @@ export class FileOperations {
                 const summary = message.summary;
                 // Skip warmup/initialization summaries
                 if (!/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
-                  console.log(`[FileOperations] Found cross-file summary in ${file}: "${summary}"`);
                   return { summary, leafUuid };
                 }
               }
@@ -350,7 +349,6 @@ export class FileOperations {
 
       return null;
     } catch (error) {
-      console.log('[FileOperations] Error in cross-file summary lookup:', error);
       return null;
     }
   }
@@ -399,7 +397,6 @@ export class FileOperations {
           // Only use summaries whose leafUuid points to a message in THIS file
           // Summaries pointing to other files are for those other conversations
           if (leafUuid && !messageUuids.has(leafUuid)) {
-            console.log(`[FileOperations] Skipping summary that points to another file: "${summary.substring(0, 50)}"`);
             continue;
           }
 
@@ -408,7 +405,7 @@ export class FileOperations {
         }
       }
     } catch (error) {
-      console.log('[FileOperations] Error checking for summary:', error);
+      // Silent - fall through to next priority
     }
 
     // Priority 2: Check for cross-file summary (leafUuid mechanism)
@@ -418,21 +415,19 @@ export class FileOperations {
         return crossFileSummary;
       }
     } catch (error) {
-      console.log('[FileOperations] Error checking cross-file summary:', error);
+      // Silent - fall through to next priority
     }
 
     // Priority 3: Fallback to first user message
     const firstMessage = FileOperations.getFirstUserMessage(filePath);
 
     if (!firstMessage) {
-      console.log('[FileOperations] No first message found for:', filePath);
       return 'Untitled';
     }
 
     const text = FileOperations.extractText(firstMessage);
 
     if (!text) {
-      console.log('[FileOperations] Could not extract title from content');
       return 'Untitled';
     }
 
@@ -628,8 +623,6 @@ export class FileOperations {
    * that point to this conversation via leafUuid
    */
   private static updateCrossFileSummaries(filePath: string, newTitle: string): void {
-    console.log(`[updateCrossFileSummaries] Checking for cross-file summaries pointing to ${path.basename(filePath)}`);
-
     // Get all message UUIDs from the target file
     const targetMessages = this.parseConversation(filePath);
     const targetMessageUuids = new Set<string>();
@@ -640,17 +633,12 @@ export class FileOperations {
     }
 
     if (targetMessageUuids.size === 0) {
-      console.log(`[updateCrossFileSummaries] No message UUIDs found in target file`);
       return;
     }
-
-    console.log(`[updateCrossFileSummaries] Target file has ${targetMessageUuids.size} message UUIDs`);
 
     // Get project directory
     const projectDir = path.dirname(filePath);
     const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl'));
-
-    let updatedCount = 0;
 
     for (const file of files) {
       // Skip the current file (we already updated it)
@@ -672,7 +660,6 @@ export class FileOperations {
         const summariesToUpdate: Array<{lineIndex: number, summary: SummaryMessage}> = [];
         for (const {lineIndex, summary} of summaries) {
           if (summary.leafUuid && targetMessageUuids.has(summary.leafUuid)) {
-            console.log(`[updateCrossFileSummaries] Found cross-file summary in ${file} at line ${lineIndex}: "${summary.summary}"`);
             summariesToUpdate.push({lineIndex, summary});
           }
         }
@@ -692,20 +679,16 @@ export class FileOperations {
             leafUuid: summary.leafUuid
           };
           lines[lineIndex] = JSON.stringify(updatedSummary);
-          updatedCount++;
-          console.log(`[updateCrossFileSummaries] Updated cross-file summary in ${file} at line ${lineIndex}`);
         }
 
         // Write back to the other file
         fs.writeFileSync(otherFilePath, lines.join('\n'), 'utf-8');
 
       } catch (error) {
-        console.log(`[updateCrossFileSummaries] Error processing ${file}:`, error);
+        // Silent - skip files that can't be processed
         continue;
       }
     }
-
-    console.log(`[updateCrossFileSummaries] Updated ${updatedCount} cross-file summaries`);
   }
 
   /**
@@ -714,8 +697,6 @@ export class FileOperations {
    * without touching the actual conversation content
    */
   static updateConversationTitle(filePath: string, newTitle: string): void {
-    console.log(`[updateConversationTitle] Renaming: ${filePath} to "${newTitle}"`);
-
     // Create backup first
     if (this.shouldCreateBackup()) {
       fs.copyFileSync(filePath, `${filePath}.backup`);
@@ -726,16 +707,13 @@ export class FileOperations {
 
     // Check if summary already exists first
     const existingSummaries = this.findSummaryMessages(filePath);
-    console.log(`[updateConversationTitle] Found ${existingSummaries.length} existing summaries`);
 
     // Find last non-sidechain message UUID for leafUuid (if any in THIS file)
     let leafUuid = this.findLastNonSidechainMessageUuid(filePath);
-    console.log(`[updateConversationTitle] Found leafUuid in this file: ${leafUuid}`);
 
     // If no local non-sidechain messages, preserve existing cross-file leafUuid
     if (!leafUuid && existingSummaries.length > 0) {
       leafUuid = existingSummaries[0].summary.leafUuid;
-      console.log(`[updateConversationTitle] No local messages, preserving cross-file leafUuid: ${leafUuid}`);
     }
 
     if (!leafUuid) {
@@ -745,7 +723,6 @@ export class FileOperations {
     if (existingSummaries.length > 0) {
       // Modify the first summary
       let targetSummary = existingSummaries[0];
-      console.log(`[updateConversationTitle] Existing summary: "${targetSummary.summary.summary}", leafUuid: ${targetSummary.summary.leafUuid}`);
 
       // Update the summary (preserve leafUuid - either local or cross-file)
       const updatedSummary: SummaryMessage = {
@@ -754,10 +731,8 @@ export class FileOperations {
         leafUuid: leafUuid
       };
 
-      console.log(`[updateConversationTitle] Updating summary at line ${targetSummary.lineIndex} with leafUuid: ${leafUuid}`);
       lines[targetSummary.lineIndex] = JSON.stringify(updatedSummary);
     } else {
-      console.log(`[updateConversationTitle] No existing summary, adding new one`);
       // Add new summary at the beginning (line 0)
       const newSummary: SummaryMessage = {
         type: 'summary',
@@ -771,7 +746,6 @@ export class FileOperations {
 
     // Write back to file
     fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
-    console.log(`[updateConversationTitle] Successfully wrote updated file`);
 
     // Now update any cross-file summaries that point to this conversation
     this.updateCrossFileSummaries(filePath, newTitle);
@@ -863,7 +837,6 @@ export class FileOperations {
             if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
               lastMessageTime = new Date(leafMessage.timestamp);
               actualLastMessageTime = lastMessageTime;
-              console.log('[FileOperations] Using leafUuid message timestamp:', lastMessageTime.toISOString());
             }
           } else if (messages.length > 0) {
             // No cross-file summary, use last NON-SIDECHAIN message timestamp (most recent activity)
@@ -873,7 +846,6 @@ export class FileOperations {
               if (FileOperations.isConversationMessage(msg) && !msg.isSidechain && 'timestamp' in msg && msg.timestamp) {
                 lastMessageTime = new Date(msg.timestamp);
                 actualLastMessageTime = lastMessageTime;
-                console.log('[FileOperations] Using last non-sidechain message timestamp:', lastMessageTime.toISOString());
                 break;
               }
             }
@@ -957,7 +929,6 @@ export class FileOperations {
             if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
               lastMessageTime = new Date(leafMessage.timestamp);
               actualLastMessageTime = lastMessageTime;
-              console.log('[FileOperations] Using leafUuid message timestamp:', lastMessageTime.toISOString());
             }
           } else if (messages.length > 0) {
             // No cross-file summary, use last NON-SIDECHAIN message timestamp (most recent activity)
@@ -967,7 +938,6 @@ export class FileOperations {
               if (FileOperations.isConversationMessage(msg) && !msg.isSidechain && 'timestamp' in msg && msg.timestamp) {
                 lastMessageTime = new Date(msg.timestamp);
                 actualLastMessageTime = lastMessageTime;
-                console.log('[FileOperations] Using last non-sidechain message timestamp:', lastMessageTime.toISOString());
                 break;
               }
             }
@@ -1050,10 +1020,10 @@ export class FileOperations {
     const results: Array<{conversation: Conversation, matches: string[]}> = [];
     const lowerQuery = query.toLowerCase();
 
-    // Get all conversations
+    // Get all conversations (search across ALL projects, not just current)
     const conversations = [
-      ...FileOperations.getAllConversations(true, true),
-      ...(includeArchived ? FileOperations.getArchivedConversations(true, true) : [])
+      ...FileOperations.getAllConversations(false, true),
+      ...(includeArchived ? FileOperations.getArchivedConversations(false, true) : [])
     ];
 
     for (const conversation of conversations) {
@@ -1198,15 +1168,12 @@ export class FileOperations {
 
       // Check if leafUuid points to actual last message
       if (summary.leafUuid !== actualLastUuid) {
-        console.log(`[checkForStaleLeafUuid] Stale leafUuid detected in ${path.basename(filePath)}`);
-        console.log(`[checkForStaleLeafUuid] Current: ${summary.leafUuid}, Actual: ${actualLastUuid}`);
         return actualLastUuid;
       }
 
       // leafUuid is current
       return null;
     } catch (error) {
-      console.log('[checkForStaleLeafUuid] Error:', error);
       return null;
     }
   }
@@ -1224,8 +1191,6 @@ export class FileOperations {
         // No update needed
         return false;
       }
-
-      console.log(`[autoUpdateStaleLeafUuid] Auto-updating leafUuid in ${path.basename(filePath)}`);
 
       // Read file
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -1253,10 +1218,8 @@ export class FileOperations {
       // Write back to file (no backup for auto-updates)
       fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
 
-      console.log(`[autoUpdateStaleLeafUuid] Successfully updated leafUuid to: ${correctLeafUuid}`);
       return true;
     } catch (error) {
-      console.log('[autoUpdateStaleLeafUuid] Error:', error);
       return false;
     }
   }
