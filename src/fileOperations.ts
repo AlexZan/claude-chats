@@ -683,12 +683,10 @@ export class FileOperations {
   static getCurrentProjectName(): string | null {
     const workspaceFolders = require('vscode').workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
-      console.log('[FileOperations] No workspace folders found');
       return null;
     }
 
     const workspacePath = workspaceFolders[0].uri.fsPath;
-    console.log('[FileOperations] Workspace path:', workspacePath);
 
     // Convert path to Claude's project directory format
     // e.g., "D:\Dev\MyProject" -> "d--Dev-MyProject"
@@ -700,7 +698,6 @@ export class FileOperations {
       .replace(/\\/g, '-')
       .replace(/\//g, '-');
 
-    console.log('[FileOperations] Normalized project name:', normalized);
     return normalized;
   }
 
@@ -746,13 +743,11 @@ export class FileOperations {
         try {
           // Skip empty conversations if setting is disabled
           if (!showEmpty && !FileOperations.hasRealMessages(filePath)) {
-            console.log('[FileOperations] Skipping file (no real messages):', file);
             continue;
           }
 
           const messages = FileOperations.parseConversation(filePath);
           const title = FileOperations.getConversationTitle(filePath);
-          console.log('[FileOperations] Found conversation:', title, 'from file:', file);
 
           // Get conversation timestamp (matches Claude Code behavior)
           // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
@@ -842,13 +837,11 @@ export class FileOperations {
         try {
           // Skip empty conversations if setting is disabled
           if (!showEmpty && !FileOperations.hasRealMessages(filePath)) {
-            console.log('[FileOperations] Skipping file (no real messages):', file);
             continue;
           }
 
           const messages = FileOperations.parseConversation(filePath);
           const title = FileOperations.getConversationTitle(filePath);
-          console.log('[FileOperations] Found conversation:', title, 'from file:', file);
 
           // Get conversation timestamp (matches Claude Code behavior)
           // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
