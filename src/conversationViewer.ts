@@ -41,25 +41,21 @@ export class ConversationViewer {
    */
   public static show(extensionUri: vscode.Uri, conversationPath: string) {
     const column = vscode.ViewColumn.One;
+    const panelTitle = this.getPanelTitle(conversationPath);
 
     // If we already have a panel, reuse it
     if (ConversationViewer.currentPanel) {
       ConversationViewer.currentPanel.conversationPath = conversationPath;
-      // Update the panel title to match the new conversation
-      const newTitle = FileOperations.getConversationTitle(conversationPath);
-      const truncatedTitle = ConversationTreeItem.truncateTitle(newTitle, 40);
-      ConversationViewer.currentPanel.panel.title = `📖 ${truncatedTitle}`;
+      ConversationViewer.currentPanel.panel.title = panelTitle;
       ConversationViewer.currentPanel.panel.reveal(column);
       ConversationViewer.currentPanel.update();
       return;
     }
 
     // Otherwise, create a new panel
-    const title = FileOperations.getConversationTitle(conversationPath);
-    const truncatedTitle = ConversationTreeItem.truncateTitle(title, 40);
     const panel = vscode.window.createWebviewPanel(
       'claudeConversationViewer',
-      `📖 ${truncatedTitle}`,
+      panelTitle,
       column,
       {
         enableScripts: true,
@@ -69,6 +65,15 @@ export class ConversationViewer {
     );
 
     ConversationViewer.currentPanel = new ConversationViewer(panel, conversationPath);
+  }
+
+  /**
+   * Get the formatted panel title for a conversation
+   */
+  private static getPanelTitle(conversationPath: string): string {
+    const title = FileOperations.getConversationTitle(conversationPath);
+    const truncatedTitle = ConversationTreeItem.truncateTitle(title, 24);
+    return `📖 ${truncatedTitle}`;
   }
 
   /**
