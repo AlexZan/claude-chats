@@ -153,6 +153,12 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   private sortOrder: 'newest' | 'oldest' = 'newest';
   private showWarmupOnly: boolean = false;
 
+  // Cache for conversations to avoid repeated file I/O
+  private conversationCache: Map<string, Conversation[]> = new Map();
+  private archivedConversationCache: Map<string, Conversation[]> = new Map();
+  private cacheTimestamp: number = 0;
+  private readonly CACHE_TTL = 5000; // 5 second cache validity
+
   constructor() {}
 
   toggleSortOrder(): void {
@@ -174,7 +180,32 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   refresh(): void {
+    this.invalidateCache();
     this._onDidChangeTreeData.fire();
+  }
+
+  /**
+   * Invalidate the conversation cache (called on file changes or user actions)
+   */
+  private invalidateCache(): void {
+    this.conversationCache.clear();
+    this.archivedConversationCache.clear();
+    this.cacheTimestamp = 0;
+  }
+
+  /**
+   * Invalidate cache for a specific file path
+   */
+  invalidateCacheForFile(filePath: string): void {
+    // Clear entire cache since a file change might affect cross-file references
+    this.invalidateCache();
+  }
+
+  /**
+   * Check if cache is still valid (hasn't expired)
+   */
+  private isCacheValid(): boolean {
+    return Date.now() - this.cacheTimestamp < this.CACHE_TTL;
   }
 
   getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
@@ -214,6 +245,14 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   private async getActiveConversationItems(): Promise<vscode.TreeItem[]> {
+    const cacheKey = `active_${this.showWarmupOnly}`;
+
+    // Check cache validity
+    if (this.isCacheValid() && this.conversationCache.has(cacheKey)) {
+      const cachedConversations = this.conversationCache.get(cacheKey)!;
+      return this.buildTreeItemsFromConversations(cachedConversations);
+    }
+
     const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
     const showEmpty = config.get<boolean>('showEmptyConversations', false);
 
@@ -225,6 +264,17 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
       ? allConversations
       : allConversations.filter(conv => showEmpty || FileOperations.hasRealMessages(conv.filePath));
 
+    // Cache the conversations
+    this.conversationCache.set(cacheKey, conversations);
+    this.cacheTimestamp = Date.now();
+
+    return this.buildTreeItemsFromConversations(conversations);
+  }
+
+  /**
+   * Build tree items from a list of conversations
+   */
+  private buildTreeItemsFromConversations(conversations: Conversation[]): vscode.TreeItem[] {
     // Sort by last message time (always newest first for grouping)
     // Use actualLastMessageTime as tiebreaker when display times are the same
     conversations.sort((a, b) => {
@@ -285,6 +335,19 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   private async getArchivedConversationItems(): Promise<vscode.TreeItem[]> {
+    const cacheKey = `archived_${this.showWarmupOnly}`;
+
+    // Check cache validity
+    if (this.isCacheValid() && this.archivedConversationCache.has(cacheKey)) {
+      const cachedConversations = this.archivedConversationCache.get(cacheKey)!;
+      if (cachedConversations.length === 0) {
+        const item = new vscode.TreeItem('No archived conversations', vscode.TreeItemCollapsibleState.None);
+        item.contextValue = 'empty';
+        return [item];
+      }
+      return this.buildTreeItemsFromConversations(cachedConversations);
+    }
+
     const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
     const showEmpty = config.get<boolean>('showEmptyConversations', false);
 
@@ -296,35 +359,17 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
       ? allConversations
       : allConversations.filter(conv => showEmpty || FileOperations.hasRealMessages(conv.filePath));
 
+    // Cache the conversations
+    this.archivedConversationCache.set(cacheKey, conversations);
+    this.cacheTimestamp = Date.now();
+
     if (conversations.length === 0) {
       const item = new vscode.TreeItem('No archived conversations', vscode.TreeItemCollapsibleState.None);
       item.contextValue = 'empty';
       return [item];
     }
 
-    // Sort by last message time (always newest first for grouping)
-    // Use actualLastMessageTime as tiebreaker when display times are the same
-    conversations.sort((a, b) => {
-      const timeDiff = b.lastMessageTime.getTime() - a.lastMessageTime.getTime();
-      if (timeDiff !== 0) {
-        return timeDiff;
-      }
-      // Tiebreaker: use actual last message time (more recent activity first)
-      return b.actualLastMessageTime.getTime() - a.actualLastMessageTime.getTime();
-    });
-
-    // Group by time periods
-    const timeGroups = this.groupByTimePeriod(conversations);
-
-    // Convert to tree items
-    const items: vscode.TreeItem[] = [];
-    for (const [label, convos] of timeGroups) {
-      if (convos.length > 0) {
-        items.push(new TimeGroupTreeItem(label, convos));
-      }
-    }
-
-    return items;
+    return this.buildTreeItemsFromConversations(conversations);
   }
 
   private groupConversationsByProject(conversations: Conversation[]): Map<string, Conversation[]> {
