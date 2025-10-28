@@ -28,6 +28,23 @@ export class FileOperations {
   }
 
   /**
+   * Async version of parseConversation - uses async file I/O
+   * Recommended for use in async contexts to avoid blocking the UI thread
+   */
+  static async parseConversationAsync(filePath: string): Promise<ConversationLine[]> {
+    const content = await fs.promises.readFile(filePath, 'utf-8');
+    const lines = content.split('\n').filter(line => line.trim());
+
+    return lines.map(line => {
+      try {
+        return JSON.parse(line) as ConversationLine;
+      } catch (error) {
+        throw new Error(`Failed to parse line in ${filePath}: ${error}`);
+      }
+    });
+  }
+
+  /**
    * Type guard to check if a line is a ConversationMessage
    */
   private static isConversationMessage(line: ConversationLine): line is ConversationMessage {
@@ -344,12 +361,122 @@ export class FileOperations {
   }
 
   /**
+   * Async version of hasRealMessages - uses async file I/O
+   * Recommended for use in async contexts to avoid blocking the UI thread
+   */
+  static async hasRealMessagesAsync(filePath: string): Promise<boolean> {
+    try {
+      const messages = await FileOperations.parseConversationAsync(filePath);
+
+      // Look for any NON-SIDECHAIN user message that isn't just "warmup"
+      for (const line of messages) {
+        // Skip metadata
+        if ('_metadata' in line) {
+          continue;
+        }
+
+        // Skip summary messages
+        if (!FileOperations.isConversationMessage(line)) {
+          continue;
+        }
+
+        // Skip sidechain messages (warmup/initialization)
+        if (line.isSidechain) {
+          continue;
+        }
+
+        // Only look for user messages
+        if (line.type !== 'user') {
+          continue;
+        }
+
+        // Get content
+        const content = line.message?.content;
+        if (!content) {
+          continue;
+        }
+
+        // Check if there's any real user content (not just system metadata)
+        let hasRealContent = false;
+
+        if (typeof content === 'string') {
+          // String content - check if it's not a system metadata message
+          if (!/^<(ide_|system-|user-|command-)/.test(content.trim())) {
+            hasRealContent = true;
+          }
+        } else if (Array.isArray(content)) {
+          // Array content - check each text item individually
+          for (const item of content) {
+            if (item.type === 'text' && item.text) {
+              const text = item.text.trim();
+              // Skip system metadata items
+              if (/^<(ide_|system-|user-|command-)/.test(text)) {
+                continue;
+              }
+              // Found a real text item that's not system metadata
+              if (text.length > 0) {
+                hasRealContent = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (hasRealContent) {
+          // Found a real (non-sidechain) message with actual user content
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Check if this conversation would be hidden by Claude Code
    * A conversation is hidden if it contains a summary with leafUuid pointing to another file
    */
   static isHiddenInClaudeCode(filePath: string): boolean {
     try {
       const messages = FileOperations.parseConversation(filePath);
+      const projectDir = path.dirname(filePath);
+
+      // Look for summary messages with leafUuid in this file
+      for (const message of messages) {
+        if (FileOperations.isSummaryMessage(message)) {
+          const leafUuid = message.leafUuid;
+          if (!leafUuid) {
+            continue;
+          }
+
+          // Check if this leafUuid points to a message in THIS file
+          const hasLocalMessage = messages.some(m => 'uuid' in m && m.uuid === leafUuid);
+
+          if (hasLocalMessage) {
+            // leafUuid points to a message in this file, so it's shown
+            continue;
+          }
+
+          // leafUuid points to a different file - this conversation is hidden by Claude Code
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Async version of isHiddenInClaudeCode - uses async file I/O
+   * A conversation is hidden if it contains a summary with leafUuid pointing to another file
+   */
+  static async isHiddenInClaudeCodeAsync(filePath: string): Promise<boolean> {
+    try {
+      const messages = await FileOperations.parseConversationAsync(filePath);
       const projectDir = path.dirname(filePath);
 
       // Look for summary messages with leafUuid in this file
@@ -880,8 +1007,8 @@ export class FileOperations {
         continue;
       }
 
-      // Filter to current project if requested
-      if (filterToCurrentProject && currentProject && projectDir !== currentProject) {
+      // Filter to current project if requested (case-insensitive comparison)
+      if (filterToCurrentProject && currentProject && projectDir.toLowerCase() !== currentProject.toLowerCase()) {
         continue;
       }
 
@@ -950,6 +1077,152 @@ export class FileOperations {
   }
 
   /**
+   * Async version of getAllConversations - uses async file I/O
+   * Recommended for use in async contexts to avoid blocking the UI thread
+   */
+  static async getAllConversationsAsync(filterToCurrentProject: boolean = true, showEmpty: boolean = false): Promise<Conversation[]> {
+    try {
+      console.log('[FileOps] getAllConversationsAsync started');
+      if (!fs.existsSync(FileOperations.PROJECTS_DIR)) {
+        console.log('[FileOps] PROJECTS_DIR does not exist');
+        return [];
+      }
+
+      const conversations: Conversation[] = [];
+      const currentProject = filterToCurrentProject ? FileOperations.getCurrentProjectName() : null;
+      console.log('[FileOps] Current project:', currentProject);
+
+      let projectDirs: string[];
+      try {
+        console.log('[FileOps] Reading projects directory...');
+        projectDirs = await fs.promises.readdir(FileOperations.PROJECTS_DIR);
+        console.log('[FileOps] Found', projectDirs.length, 'directories');
+      } catch (error) {
+        console.error('[FileOps] Error reading projects directory:', error);
+        return [];
+      }
+
+      console.log('[FileOps] Processing', projectDirs.length, 'project directories');
+      for (const projectDir of projectDirs) {
+        // Skip archive directory
+        if (projectDir === '_archive') {
+          continue;
+        }
+
+        // Filter to current project if requested (case-insensitive comparison)
+        if (filterToCurrentProject && currentProject && projectDir.toLowerCase() !== currentProject.toLowerCase()) {
+          continue;
+        }
+
+        const projectPath = path.join(FileOperations.PROJECTS_DIR, projectDir);
+
+        try {
+          const stat = await fs.promises.stat(projectPath);
+          if (!stat.isDirectory()) {
+            continue;
+          }
+        } catch {
+          continue; // Skip if can't stat directory
+        }
+
+        const files = await fs.promises.readdir(projectPath);
+        console.log(`[FileOps] Found ${files.length} files in ${projectPath}, processing in parallel...`);
+
+        // Process all files in parallel using Promise.all
+        const filePromises = files
+          .filter(file => file.endsWith('.jsonl') && !file.endsWith('.backup'))
+          .map(async (file) => {
+            const filePath = path.join(projectPath, file);
+            console.log(`[FileOps] Processing file: ${file}`);
+
+            try {
+              const stats = await fs.promises.stat(filePath);
+
+              // Parse once and extract all needed metadata
+              let messages: ConversationLine[];
+              try {
+                console.log(`[FileOps] Parsing ${file}...`);
+                messages = await FileOperations.parseConversationAsync(filePath);
+                console.log(`[FileOps] Parsed ${file}: ${messages.length} messages`);
+              } catch (parseError) {
+                console.error(`[FileOps] Failed to parse conversation ${filePath}:`, parseError);
+                return null;
+              }
+
+              let metadata: any;
+              try {
+                console.log(`[FileOps] Extracting metadata from ${file}...`);
+                metadata = FileOperations.extractConversationMetadata(messages, filePath);
+                console.log(`[FileOps] Metadata extracted: title="${metadata.title}"`);
+              } catch (metaError) {
+                console.error(`[FileOps] Failed to extract metadata from ${filePath}:`, metaError);
+                return null;
+              }
+
+              // Skip empty conversations if setting is disabled
+              if (!showEmpty && !metadata.hasRealMessages) {
+                return null;
+              }
+
+              // Get conversation timestamp (matches Claude Code behavior)
+              // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
+              // Priority 2: Use last message timestamp (most recent activity)
+              // Priority 3: Fall back to file mtime
+              let lastMessageTime = metadata.lastMessageTime;
+              let actualLastMessageTime = metadata.lastMessageTime;
+
+              // Skip cross-file summary search during initial load to avoid O(n²) file parsing
+              // This will be populated lazily when needed by the tree item renderer
+              // let crossFileSummary: any;
+              // try {
+              //   crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
+              // } catch (cfError) {
+              //   console.error(`[FileOps] Failed to find cross-file summary for ${filePath}:`, cfError);
+              //   crossFileSummary = null;
+              // }
+
+              // if (crossFileSummary) {
+              //   // Find the message with this UUID to get its timestamp
+              //   const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
+              //   if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
+              //     lastMessageTime = new Date(leafMessage.timestamp);
+              //     actualLastMessageTime = lastMessageTime;
+              //   }
+              // }
+
+              return {
+                id: path.parse(file).name,
+                title: metadata.title,
+                filePath,
+                project: projectDir,
+                lastModified: stats.mtime,
+                lastMessageTime: lastMessageTime,
+                actualLastMessageTime: actualLastMessageTime,
+                messageCount: messages.length,
+                fileSize: stats.size,
+                isArchived: false
+              };
+            } catch (error) {
+              console.error(`[FileOps] Unexpected error parsing conversation ${filePath}:`, error);
+              return null;
+            }
+          });
+
+        // Wait for all files to be processed in parallel
+        const results = await Promise.all(filePromises);
+        const validConversations = results.filter((conv): conv is Conversation => conv !== null);
+        conversations.push(...validConversations);
+      }
+
+      console.log('[FileOps] getAllConversationsAsync finished with', conversations.length, 'conversations');
+      return conversations;
+    } catch (error) {
+      console.error('[FileOps] Error in getAllConversationsAsync:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get all archived conversations (optionally filtered to current project)
    */
   static getArchivedConversations(filterToCurrentProject: boolean = true, showEmpty: boolean = false): Conversation[] {
@@ -962,8 +1235,8 @@ export class FileOperations {
     const projectDirs = fs.readdirSync(FileOperations.ARCHIVE_DIR);
 
     for (const projectDir of projectDirs) {
-      // Filter to current project if requested
-      if (filterToCurrentProject && currentProject && projectDir !== currentProject) {
+      // Filter to current project if requested (case-insensitive comparison)
+      if (filterToCurrentProject && currentProject && projectDir.toLowerCase() !== currentProject.toLowerCase()) {
         continue;
       }
 
@@ -1029,6 +1302,134 @@ export class FileOperations {
     }
 
     return conversations;
+  }
+
+  /**
+   * Async version of getArchivedConversations - uses async file I/O
+   * Recommended for use in async contexts to avoid blocking the UI thread
+   */
+  static async getArchivedConversationsAsync(filterToCurrentProject: boolean = true, showEmpty: boolean = false): Promise<Conversation[]> {
+    try {
+      if (!fs.existsSync(FileOperations.ARCHIVE_DIR)) {
+        return [];
+      }
+
+      const conversations: Conversation[] = [];
+      const currentProject = filterToCurrentProject ? FileOperations.getCurrentProjectName() : null;
+
+      let projectDirs: string[];
+      try {
+        projectDirs = await fs.promises.readdir(FileOperations.ARCHIVE_DIR);
+      } catch (error) {
+        console.error('Error reading archive directory:', error);
+        return [];
+      }
+
+      for (const projectDir of projectDirs) {
+        // Filter to current project if requested (case-insensitive comparison)
+        if (filterToCurrentProject && currentProject && projectDir.toLowerCase() !== currentProject.toLowerCase()) {
+          continue;
+        }
+
+        const projectPath = path.join(FileOperations.ARCHIVE_DIR, projectDir);
+
+        try {
+          const stat = await fs.promises.stat(projectPath);
+          if (!stat.isDirectory()) {
+            continue;
+          }
+        } catch {
+          continue; // Skip if can't stat directory
+        }
+
+        const files = await fs.promises.readdir(projectPath);
+
+        // Process all files in parallel using Promise.all
+        const filePromises = files
+          .filter(file => file.endsWith('.jsonl') && !file.endsWith('.backup'))
+          .map(async (file) => {
+            const filePath = path.join(projectPath, file);
+
+            try {
+              const stats = await fs.promises.stat(filePath);
+
+              // Parse once and extract all needed metadata
+              let messages: ConversationLine[];
+              try {
+                messages = await FileOperations.parseConversationAsync(filePath);
+              } catch (parseError) {
+                console.error(`[FileOps] Failed to parse archived conversation async ${filePath}:`, parseError);
+                return null;
+              }
+
+              let metadata: any;
+              try {
+                metadata = FileOperations.extractConversationMetadata(messages, filePath);
+              } catch (metaError) {
+                console.error(`[FileOps] Failed to extract metadata from archived ${filePath}:`, metaError);
+                return null;
+              }
+
+              // Skip empty conversations if setting is disabled
+              if (!showEmpty && !metadata.hasRealMessages) {
+                return null;
+              }
+
+              // Get conversation timestamp (matches Claude Code behavior)
+              // Priority 2: Use last message timestamp (most recent activity)
+              // Priority 3: Fall back to file mtime
+              // Note: Skip cross-file summary search (Priority 1) during initial load to avoid O(n²) file parsing
+              let lastMessageTime = metadata.lastMessageTime;
+              let actualLastMessageTime = metadata.lastMessageTime;
+
+              // Cross-file summary search is skipped during async load
+              // This will be populated lazily when needed by the tree item renderer
+              // let crossFileSummary: any;
+              // try {
+              //   crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
+              // } catch (cfError) {
+              //   console.error(`[FileOps] Failed to find cross-file summary for archived ${filePath}:`, cfError);
+              //   crossFileSummary = null;
+              // }
+
+              // if (crossFileSummary) {
+              //   // Find the message with this UUID to get its timestamp
+              //   const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
+              //   if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
+              //     lastMessageTime = new Date(leafMessage.timestamp);
+              //     actualLastMessageTime = lastMessageTime;
+              //   }
+              // }
+
+              return {
+                id: path.parse(file).name,
+                title: metadata.title,
+                filePath,
+                project: projectDir,
+                lastModified: stats.mtime,
+                lastMessageTime: lastMessageTime,
+                actualLastMessageTime: actualLastMessageTime,
+                messageCount: messages.length,
+                fileSize: stats.size,
+                isArchived: true
+              };
+            } catch (error) {
+              console.error(`[FileOps] Unexpected error parsing archived conversation ${filePath}:`, error);
+              return null;
+            }
+          });
+
+        // Wait for all files to be processed in parallel
+        const results = await Promise.all(filePromises);
+        const validConversations = results.filter((conv): conv is Conversation => conv !== null);
+        conversations.push(...validConversations);
+      }
+
+      return conversations;
+    } catch (error) {
+      console.error('Error in getArchivedConversationsAsync:', error);
+      return [];
+    }
   }
 
   /**
