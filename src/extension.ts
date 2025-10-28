@@ -244,16 +244,46 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Debounce map to handle rapid file writes
   const debounceTimers = new Map<string, NodeJS.Timeout>();
+  const createDebounceTimers = new Map<string, NodeJS.Timeout>();
   const DEBOUNCE_DELAY = 500; // 500ms
 
-  // Handle file creation (new conversations)
+  // Handle file creation (new conversations) with debouncing
   watcher.onDidCreate((uri) => {
-    console.log(`[FileWatcher] New conversation detected: ${uri.fsPath}`);
-    treeProvider.refresh();
+    // Skip backup files
+    if (uri.fsPath.endsWith('.backup')) {
+      return;
+    }
+
+    // Skip refresh if tree is currently loading - avoid interrupting the initial load
+    if (treeProvider.isCurrentlyLoading()) {
+      console.log(`[FileWatcher] Ignoring file creation during load: ${uri.fsPath}`);
+      return;
+    }
+
+    // Clear existing timer for this file
+    const existingTimer = createDebounceTimers.get(uri.fsPath);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Set new debounced timer
+    const timer = setTimeout(() => {
+      createDebounceTimers.delete(uri.fsPath);
+      console.log(`[FileWatcher] New conversation detected: ${uri.fsPath}`);
+      treeProvider.refresh();
+    }, DEBOUNCE_DELAY);
+
+    createDebounceTimers.set(uri.fsPath, timer);
   });
 
   // Handle file deletion
   watcher.onDidDelete((uri) => {
+    // Skip refresh if tree is currently loading
+    if (treeProvider.isCurrentlyLoading()) {
+      console.log(`[FileWatcher] Ignoring file deletion during load: ${uri.fsPath}`);
+      return;
+    }
+
     console.log(`[FileWatcher] Conversation deleted: ${uri.fsPath}`);
 
     // Clear any pending debounce for this file
@@ -270,6 +300,12 @@ export function activate(context: vscode.ExtensionContext) {
   watcher.onDidChange((uri) => {
     // Skip backup files
     if (uri.fsPath.endsWith('.backup')) {
+      return;
+    }
+
+    // Skip refresh if tree is currently loading
+    if (treeProvider.isCurrentlyLoading()) {
+      console.log(`[FileWatcher] Ignoring file change during load: ${uri.fsPath}`);
       return;
     }
 
@@ -306,6 +342,8 @@ export function activate(context: vscode.ExtensionContext) {
     dispose: () => {
       debounceTimers.forEach(timer => clearTimeout(timer));
       debounceTimers.clear();
+      createDebounceTimers.forEach(timer => clearTimeout(timer));
+      createDebounceTimers.clear();
     }
   });
 

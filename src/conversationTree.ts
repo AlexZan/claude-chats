@@ -152,6 +152,8 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
 
   private sortOrder: 'newest' | 'oldest' = 'newest';
   private showWarmupOnly: boolean = false;
+  private isLoading: boolean = false;
+  private pendingRefresh: boolean = false;
 
   // Cache for conversations to avoid repeated file I/O
   private conversationCache: Map<string, Conversation[]> = new Map();
@@ -160,6 +162,28 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   private readonly CACHE_TTL = 5000; // 5 second cache validity
 
   constructor() {}
+
+  /**
+   * Check if the tree is currently loading conversations
+   */
+  isCurrentlyLoading(): boolean {
+    return this.isLoading;
+  }
+
+  /**
+   * Mark the tree as loading (prevents file watcher refreshes during initial load)
+   */
+  setLoading(isLoading: boolean): void {
+    console.log(`[TreeProvider] setLoading: ${isLoading}`);
+    this.isLoading = isLoading;
+
+    // If we were loading and now finished, check if a refresh was pending
+    if (!isLoading && this.pendingRefresh) {
+      console.log('[TreeProvider] Pending refresh triggered after load completed');
+      this.pendingRefresh = false;
+      this.refresh();
+    }
+  }
 
   toggleSortOrder(): void {
     this.sortOrder = this.sortOrder === 'newest' ? 'oldest' : 'newest';
@@ -180,6 +204,13 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   refresh(): void {
+    // If we're currently loading, queue the refresh for after load completes
+    if (this.isLoading) {
+      console.log('[TreeProvider] Refresh requested during load, queuing for later');
+      this.pendingRefresh = true;
+      return;
+    }
+
     this.invalidateCache();
     this._onDidChangeTreeData.fire();
   }
@@ -215,6 +246,8 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
     if (!element) {
       // Root level: Show "Active" and "Archived" sections
+      // Mark as loading when expanding root to show initial content
+      this.setLoading(true);
       return [
         new vscode.TreeItem('Active Conversations', vscode.TreeItemCollapsibleState.Expanded),
         new vscode.TreeItem('Archived Conversations', vscode.TreeItemCollapsibleState.Collapsed)
@@ -222,11 +255,21 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     }
 
     if (element.label === 'Active Conversations') {
-      return this.getActiveConversationItems();
+      try {
+        return await this.getActiveConversationItems();
+      } finally {
+        // Mark load as complete once we've fetched the items
+        this.setLoading(false);
+      }
     }
 
     if (element.label === 'Archived Conversations') {
-      return this.getArchivedConversationItems();
+      try {
+        return await this.getArchivedConversationItems();
+      } finally {
+        // Mark load as complete once we've fetched the items
+        this.setLoading(false);
+      }
     }
 
     if (element instanceof TimeGroupTreeItem) {
@@ -256,8 +299,8 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
     const showEmpty = config.get<boolean>('showEmptyConversations', false);
 
-    // Get all conversations, then filter based on warmup filter
-    const allConversations = FileOperations.getAllConversations(true, true);
+    // Get all conversations asynchronously, then filter based on warmup filter
+    const allConversations = await FileOperations.getAllConversationsAsync(true, true);
 
     // Filter out warmup-only conversations unless user wants to see them
     const conversations = this.showWarmupOnly
@@ -351,8 +394,8 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
     const showEmpty = config.get<boolean>('showEmptyConversations', false);
 
-    // Get all conversations, then filter based on warmup filter
-    const allConversations = FileOperations.getArchivedConversations(true, true);
+    // Get all conversations asynchronously, then filter based on warmup filter
+    const allConversations = await FileOperations.getArchivedConversationsAsync(true, true);
 
     // Filter out warmup-only conversations unless user wants to see them
     const conversations = this.showWarmupOnly

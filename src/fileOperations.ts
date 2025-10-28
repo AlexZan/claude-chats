@@ -133,7 +133,7 @@ export class FileOperations {
 
     // Priority 3: Fallback to first user message
     if (title === 'Untitled') {
-      const firstMessage = FileOperations.getFirstUserMessage(filePath);
+      const firstMessage = FileOperations.getFirstUserMessage(messages);
       if (firstMessage) {
         const text = FileOperations.extractText(firstMessage);
         if (text) {
@@ -146,16 +146,15 @@ export class FileOperations {
   }
 
   /**
-   * Get the first meaningful user message (the title)
+   * Get the first meaningful user message from already-parsed messages
+   * Avoids re-parsing the file by accepting messages as a parameter
    * Looks for messages in order:
    * 1. First non-sidechain user message (actual user input)
    * 2. First non-sidechain message (any type) that's not metadata
    * 3. For warmup-only: first sidechain assistant message (initialization)
    * 4. Last resort: first sidechain message (the "Warmup" message itself)
    */
-  static getFirstUserMessage(filePath: string): ConversationMessage | null {
-    const messages = FileOperations.parseConversation(filePath);
-
+  static getFirstUserMessage(messages: ConversationLine[]): ConversationMessage | null {
     // First pass: look for non-sidechain user messages (actual conversation titles)
     for (const line of messages) {
       if ('_metadata' in line) {
@@ -577,17 +576,30 @@ export class FileOperations {
   }
 
   /**
-   * Get conversation title from file
+   * Get conversation title from already-parsed messages or file
    * Priority:
    * 1. Local summary (in this file) - takes precedence for renamed conversations
    * 2. Cross-file summary (leafUuid pointing to this file's messages)
    * 3. First user message
    * This matches Claude Code's title display behavior
    */
-  static getConversationTitle(filePath: string): string {
+  static getConversationTitle(filePathOrMessages: string | ConversationLine[], filePath?: string): string {
+    // Support both old (filePath: string) and new (messages: ConversationLine[]) signatures
+    let messages: ConversationLine[];
+    let actualFilePath: string;
+
+    if (typeof filePathOrMessages === 'string') {
+      // Old signature: filePath only
+      actualFilePath = filePathOrMessages;
+      messages = FileOperations.parseConversation(actualFilePath);
+    } else {
+      // New signature: messages provided, filePath optional
+      messages = filePathOrMessages;
+      actualFilePath = filePath || '';
+    }
+
     // Priority 1: Check for LOCAL summary field first (takes precedence over cross-file)
     try {
-      const messages = FileOperations.parseConversation(filePath);
 
       // Get all message UUIDs in THIS file
       const messageUuids = new Set<string>();
@@ -624,7 +636,7 @@ export class FileOperations {
 
     // Priority 2: Check for cross-file summary (leafUuid mechanism)
     try {
-      const crossFileSummary = FileOperations.findCrossFileSummary(filePath);
+      const crossFileSummary = FileOperations.findCrossFileSummary(actualFilePath);
       if (crossFileSummary) {
         return crossFileSummary;
       }
@@ -633,7 +645,7 @@ export class FileOperations {
     }
 
     // Priority 3: Fallback to first user message
-    const firstMessage = FileOperations.getFirstUserMessage(filePath);
+    const firstMessage = FileOperations.getFirstUserMessage(messages);
 
     if (!firstMessage) {
       return 'Untitled';
