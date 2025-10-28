@@ -42,6 +42,93 @@ export class FileOperations {
   }
 
   /**
+   * Extract conversation metadata in a single pass
+   * Avoids duplicate parsing of the same file
+   * Returns title, hasRealMessages, and lastMessageTime all from one parse
+   */
+  static extractConversationMetadata(messages: ConversationLine[], filePath: string): {
+    title: string;
+    hasRealMessages: boolean;
+    lastMessageTime: Date;
+  } {
+    let title = 'Untitled';
+    let hasRealMessages = false;
+    let lastMessageTime = new Date();
+
+    // Get all message UUIDs in THIS file (for summary validation)
+    const messageUuids = new Set<string>();
+    for (const message of messages) {
+      if ('uuid' in message && message.uuid) {
+        messageUuids.add(message.uuid);
+      }
+    }
+
+    // Single pass through messages to extract timestamp and detect real messages
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+
+      // Track if we have real messages (for filtering empty conversations)
+      if (!hasRealMessages && FileOperations.isConversationMessage(message) && !message.isSidechain) {
+        hasRealMessages = true;
+      }
+
+      // Get last message timestamp (from last non-sidechain message)
+      if (lastMessageTime.getTime() === new Date().getTime() && 'timestamp' in message && message.timestamp) {
+        if (FileOperations.isConversationMessage(message) && !message.isSidechain) {
+          lastMessageTime = new Date(message.timestamp);
+        }
+      }
+    }
+
+    // Extract title (Priority 1: Local summary)
+    for (const message of messages) {
+      if (FileOperations.isSummaryMessage(message)) {
+        const summary = message.summary;
+        const leafUuid = message.leafUuid;
+
+        // Skip warmup/initialization summaries
+        if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+          continue;
+        }
+
+        // Only use summaries whose leafUuid points to a message in THIS file
+        if (leafUuid && !messageUuids.has(leafUuid)) {
+          continue;
+        }
+
+        // Found a valid local summary
+        title = summary;
+        break;
+      }
+    }
+
+    // Priority 2: Check for cross-file summary (if still untitled)
+    if (title === 'Untitled') {
+      try {
+        const crossFileSummary = FileOperations.findCrossFileSummary(filePath);
+        if (crossFileSummary) {
+          title = crossFileSummary;
+        }
+      } catch (error) {
+        // Silent - continue to next priority
+      }
+    }
+
+    // Priority 3: Fallback to first user message
+    if (title === 'Untitled') {
+      const firstMessage = FileOperations.getFirstUserMessage(filePath);
+      if (firstMessage) {
+        const text = FileOperations.extractText(firstMessage);
+        if (text) {
+          title = text.split('\n')[0].substring(0, 100);
+        }
+      }
+    }
+
+    return { title, hasRealMessages, lastMessageTime };
+  }
+
+  /**
    * Get the first meaningful user message (the title)
    * Looks for messages in order:
    * 1. First non-sidechain user message (actual user input)
@@ -815,20 +902,21 @@ export class FileOperations {
         const stats = fs.statSync(filePath);
 
         try {
+          // Parse once and extract all needed metadata
+          const messages = FileOperations.parseConversation(filePath);
+          const metadata = FileOperations.extractConversationMetadata(messages, filePath);
+
           // Skip empty conversations if setting is disabled
-          if (!showEmpty && !FileOperations.hasRealMessages(filePath)) {
+          if (!showEmpty && !metadata.hasRealMessages) {
             continue;
           }
-
-          const messages = FileOperations.parseConversation(filePath);
-          const title = FileOperations.getConversationTitle(filePath);
 
           // Get conversation timestamp (matches Claude Code behavior)
           // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
           // Priority 2: Use last message timestamp (most recent activity)
           // Priority 3: Fall back to file mtime
-          let lastMessageTime = stats.mtime;
-          let actualLastMessageTime = stats.mtime;
+          let lastMessageTime = metadata.lastMessageTime;
+          let actualLastMessageTime = metadata.lastMessageTime;
 
           const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
           if (crossFileSummary) {
@@ -838,22 +926,11 @@ export class FileOperations {
               lastMessageTime = new Date(leafMessage.timestamp);
               actualLastMessageTime = lastMessageTime;
             }
-          } else if (messages.length > 0) {
-            // No cross-file summary, use last NON-SIDECHAIN message timestamp (most recent activity)
-            // Find last message that isn't a warmup/sidechain
-            for (let i = messages.length - 1; i >= 0; i--) {
-              const msg = messages[i];
-              if (FileOperations.isConversationMessage(msg) && !msg.isSidechain && 'timestamp' in msg && msg.timestamp) {
-                lastMessageTime = new Date(msg.timestamp);
-                actualLastMessageTime = lastMessageTime;
-                break;
-              }
-            }
           }
 
           conversations.push({
             id: path.parse(file).name,
-            title,
+            title: metadata.title,
             filePath,
             project: projectDir,
             lastModified: stats.mtime,
@@ -907,20 +984,21 @@ export class FileOperations {
         const stats = fs.statSync(filePath);
 
         try {
+          // Parse once and extract all needed metadata
+          const messages = FileOperations.parseConversation(filePath);
+          const metadata = FileOperations.extractConversationMetadata(messages, filePath);
+
           // Skip empty conversations if setting is disabled
-          if (!showEmpty && !FileOperations.hasRealMessages(filePath)) {
+          if (!showEmpty && !metadata.hasRealMessages) {
             continue;
           }
-
-          const messages = FileOperations.parseConversation(filePath);
-          const title = FileOperations.getConversationTitle(filePath);
 
           // Get conversation timestamp (matches Claude Code behavior)
           // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
           // Priority 2: Use last message timestamp (most recent activity)
           // Priority 3: Fall back to file mtime
-          let lastMessageTime = stats.mtime;
-          let actualLastMessageTime = stats.mtime;
+          let lastMessageTime = metadata.lastMessageTime;
+          let actualLastMessageTime = metadata.lastMessageTime;
 
           const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
           if (crossFileSummary) {
@@ -930,22 +1008,11 @@ export class FileOperations {
               lastMessageTime = new Date(leafMessage.timestamp);
               actualLastMessageTime = lastMessageTime;
             }
-          } else if (messages.length > 0) {
-            // No cross-file summary, use last NON-SIDECHAIN message timestamp (most recent activity)
-            // Find last message that isn't a warmup/sidechain
-            for (let i = messages.length - 1; i >= 0; i--) {
-              const msg = messages[i];
-              if (FileOperations.isConversationMessage(msg) && !msg.isSidechain && 'timestamp' in msg && msg.timestamp) {
-                lastMessageTime = new Date(msg.timestamp);
-                actualLastMessageTime = lastMessageTime;
-                break;
-              }
-            }
           }
 
           conversations.push({
             id: path.parse(file).name,
-            title,
+            title: metadata.title,
             filePath,
             project: projectDir,
             lastModified: stats.mtime,
