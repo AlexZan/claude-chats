@@ -29,8 +29,8 @@ export class ConversationTreeItem extends vscode.TreeItem {
     const displayTitle = ConversationTreeItem.truncateTitle(conversation.title);
     super(displayTitle, collapsibleState);
 
-    // Check if this conversation is hidden by Claude Code
-    const isHidden = FileOperations.isHiddenInClaudeCode(conversation.filePath);
+    // Use cached isHidden property (calculated during file load to avoid re-parsing)
+    const isHidden = conversation.isHidden;
 
     this.tooltip = this.buildTooltip(isHidden);
     this.description = this.buildDescription(isHidden);

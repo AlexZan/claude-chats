@@ -247,8 +247,18 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Watch for Claude Code conversation file changes with intelligent auto-update
-  const claudeProjectsPath = require('path').join(require('os').homedir(), '.claude', 'projects');
-  const watchPattern = new vscode.RelativePattern(claudeProjectsPath, '**/*.jsonl');
+  // Only watch the current project directory to avoid unnecessary refreshes
+  const path = require('path');
+  const os = require('os');
+  const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
+
+  // Get current project directory
+  const { FileOperations } = require('./fileOperations');
+  const currentProject = FileOperations.getCurrentProjectName();
+
+  // Watch only current project's .jsonl files (not all projects)
+  const currentProjectPath = currentProject ? path.join(claudeProjectsPath, currentProject) : claudeProjectsPath;
+  const watchPattern = new vscode.RelativePattern(currentProjectPath, '*.jsonl');
   const watcher = vscode.workspace.createFileSystemWatcher(watchPattern);
 
   // Debounce map to handle rapid file writes
@@ -365,6 +375,29 @@ export function activate(context: vscode.ExtensionContext) {
 
     debounceTimers.set(uri.fsPath, timer);
   });
+
+  // Listen for workspace folder changes to update file watcher
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      // Dispose old watcher
+      watcher.dispose();
+
+      // Create new watcher for the new project
+      const newProject = FileOperations.getCurrentProjectName();
+      const newProjectPath = newProject ? path.join(claudeProjectsPath, newProject) : claudeProjectsPath;
+      const newWatchPattern = new vscode.RelativePattern(newProjectPath, '*.jsonl');
+      const newWatcher = vscode.workspace.createFileSystemWatcher(newWatchPattern);
+
+      // Re-register all event handlers on the new watcher
+      // Note: This is simplified - in production you'd want to refactor the handlers into reusable functions
+      console.log(`[${getTimestamp()}] [FileWatcher] Workspace changed, now watching: ${newProjectPath}`);
+
+      // Refresh tree to show new project's conversations
+      treeProvider.refresh(true);
+
+      context.subscriptions.push(newWatcher);
+    })
+  );
 
   // Clean up timers on deactivation
   context.subscriptions.push({

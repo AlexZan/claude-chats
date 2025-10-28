@@ -45,6 +45,7 @@ export interface Conversation {
   fileSize: number;
   isArchived: boolean;
   hasRealMessages: boolean; // Whether conversation has real user messages (not just warmup)
+  isHidden: boolean; // Whether conversation is hidden in Claude Code (linked to another conversation)
 }
 
 export interface ConversationMetadata {
