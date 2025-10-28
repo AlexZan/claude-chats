@@ -44,6 +44,7 @@ export interface Conversation {
   messageCount: number;
   fileSize: number;
   isArchived: boolean;
+  hasRealMessages: boolean; // Whether conversation has real user messages (not just warmup)
 }
 
 export interface ConversationMetadata {

@@ -12,6 +12,14 @@ export class FileOperations {
   private static readonly ARCHIVE_DIR = path.join(FileOperations.PROJECTS_DIR, '_archive');
 
   /**
+   * Get formatted timestamp for logs
+   */
+  private static getTimestamp(): string {
+    const now = new Date();
+    return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
+  }
+
+  /**
    * Parse a .jsonl conversation file
    */
   static parseConversation(filePath: string): ConversationLine[] {
@@ -1077,7 +1085,8 @@ export class FileOperations {
             actualLastMessageTime: actualLastMessageTime,
             messageCount: messages.length,
             fileSize: stats.size,
-            isArchived: false
+            isArchived: false,
+            hasRealMessages: metadata.hasRealMessages
           });
         } catch (error) {
           console.error(`Failed to parse conversation ${filePath}:`, error);
@@ -1094,27 +1103,20 @@ export class FileOperations {
    */
   static async getAllConversationsAsync(filterToCurrentProject: boolean = true, showEmpty: boolean = false): Promise<Conversation[]> {
     try {
-      console.log('[FileOps] getAllConversationsAsync started');
       if (!fs.existsSync(FileOperations.PROJECTS_DIR)) {
-        console.log('[FileOps] PROJECTS_DIR does not exist');
         return [];
       }
 
       const conversations: Conversation[] = [];
       const currentProject = filterToCurrentProject ? FileOperations.getCurrentProjectName() : null;
-      console.log('[FileOps] Current project:', currentProject);
 
       let projectDirs: string[];
       try {
-        console.log('[FileOps] Reading projects directory...');
         projectDirs = await fs.promises.readdir(FileOperations.PROJECTS_DIR);
-        console.log('[FileOps] Found', projectDirs.length, 'directories');
       } catch (error) {
         console.error('[FileOps] Error reading projects directory:', error);
         return [];
       }
-
-      console.log('[FileOps] Processing', projectDirs.length, 'project directories');
       for (const projectDir of projectDirs) {
         // Skip archive directory
         if (projectDir === '_archive') {
@@ -1138,14 +1140,16 @@ export class FileOperations {
         }
 
         const files = await fs.promises.readdir(projectPath);
-        console.log(`[FileOps] Found ${files.length} files in ${projectPath}, processing in parallel...`);
+        const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.endsWith('.backup'));
+
+        if (jsonlFiles.length > 0) {
+          console.log(`[${FileOperations.getTimestamp()}] [FileOps] Processing ${jsonlFiles.length} conversation files in parallel...`);
+        }
 
         // Process all files in parallel using Promise.all
-        const filePromises = files
-          .filter(file => file.endsWith('.jsonl') && !file.endsWith('.backup'))
+        const filePromises = jsonlFiles
           .map(async (file) => {
             const filePath = path.join(projectPath, file);
-            console.log(`[FileOps] Processing file: ${file}`);
 
             try {
               const stats = await fs.promises.stat(filePath);
@@ -1153,9 +1157,7 @@ export class FileOperations {
               // Parse once and extract all needed metadata
               let messages: ConversationLine[];
               try {
-                console.log(`[FileOps] Parsing ${file}...`);
                 messages = await FileOperations.parseConversationAsync(filePath);
-                console.log(`[FileOps] Parsed ${file}: ${messages.length} messages`);
               } catch (parseError) {
                 console.error(`[FileOps] Failed to parse conversation ${filePath}:`, parseError);
                 return null;
@@ -1163,9 +1165,7 @@ export class FileOperations {
 
               let metadata: any;
               try {
-                console.log(`[FileOps] Extracting metadata from ${file}...`);
                 metadata = FileOperations.extractConversationMetadata(messages, filePath);
-                console.log(`[FileOps] Metadata extracted: title="${metadata.title}"`);
               } catch (metaError) {
                 console.error(`[FileOps] Failed to extract metadata from ${filePath}:`, metaError);
                 return null;
@@ -1212,7 +1212,8 @@ export class FileOperations {
                 actualLastMessageTime: actualLastMessageTime,
                 messageCount: messages.length,
                 fileSize: stats.size,
-                isArchived: false
+                isArchived: false,
+                hasRealMessages: metadata.hasRealMessages
               };
             } catch (error) {
               console.error(`[FileOps] Unexpected error parsing conversation ${filePath}:`, error);
@@ -1226,7 +1227,7 @@ export class FileOperations {
         conversations.push(...validConversations);
       }
 
-      console.log('[FileOps] getAllConversationsAsync finished with', conversations.length, 'conversations');
+      console.log(`[${FileOperations.getTimestamp()}] [FileOps] getAllConversationsAsync finished with ${conversations.length} conversations`);
       return conversations;
     } catch (error) {
       console.error('[FileOps] Error in getAllConversationsAsync:', error);
@@ -1305,7 +1306,8 @@ export class FileOperations {
             actualLastMessageTime: actualLastMessageTime,
             messageCount: messages.length,
             fileSize: stats.size,
-            isArchived: true
+            isArchived: true,
+            hasRealMessages: metadata.hasRealMessages
           });
         } catch (error) {
           console.error(`Failed to parse archived conversation ${filePath}:`, error);

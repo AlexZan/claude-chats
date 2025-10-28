@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2025-01-28
+
+### Performance Improvements
+
+This release focuses on major performance optimizations for users with large conversation histories (200+ files).
+
+### Added
+
+- **Timestamped Logging**: All log messages now include millisecond-precision timestamps (HH:MM:SS.mmm format) for better performance debugging
+- **Smart Caching System**:
+  - Implemented 60-second cache TTL to avoid redundant file operations
+  - Cache is preserved during view updates but invalidated on data changes
+  - File watchers and user actions intelligently manage cache invalidation
+
+### Fixed
+
+- **Eliminated Double-Parsing Bottleneck**: Fixed critical performance issue where files were being parsed twice
+  - First in parallel during load (fast)
+  - Then sequentially during filtering (very slow)
+  - Solution: Added `hasRealMessages` field to `Conversation` interface to cache warmup detection results
+  - **Performance impact**: Reduced filtering overhead from O(n) file reads to O(1) property access
+- **Multiple Reloads During Initial Load**: Fixed race condition where file watcher would trigger refreshes during the initial load
+  - Added `isLoading` flag to track loading state
+  - Added 2-second grace period after load completes to ignore spurious file events
+  - File watcher now checks `isCurrentlyLoading()` before processing events
+- **Warmup Conversation Spam**: Fixed file watcher continuously refreshing from Claude Code's background warmup conversations
+  - File watchers now check `hasRealMessagesAsync()` before triggering refreshes
+  - Warmup-only conversations are logged but don't cause tree refreshes
+  - Users see "Ignoring warmup-only conversation" in logs instead of constant refreshes
+- **Verbose Console Logging**: Reduced log output by ~98%
+  - Removed per-file processing logs (was generating 500+ lines for 178 files)
+  - Kept only summary messages showing total file count and completion
+
+### Changed
+
+- **Cache Invalidation Strategy**: Made `refresh()` cache invalidation optional via parameter
+  - Default behavior: `refresh(true)` invalidates cache (for data-modifying operations)
+  - View updates can use `refresh(false)` to preserve cache
+  - Manual refresh command explicitly invalidates cache to force fresh data
+- **Parallel File Processing**: Optimized `getAllConversationsAsync()` to process files in parallel using `Promise.all()`
+- **Async File Operations**: All file I/O now uses async/await to prevent UI blocking
+
+### Technical Details
+
+For users with ~200 conversation files:
+- **Before optimizations**: 30-50 seconds per load, multiple reloads, 500+ log lines
+- **After optimizations**: ~35-40 seconds for initial load (single pass), <1 second for cached refreshes, minimal logging
+
+The performance improvements come from:
+1. Eliminating redundant file parsing (single-pass metadata extraction)
+2. Preventing unnecessary refreshes (loading state management, warmup filtering)
+3. Utilizing cache effectively (60s TTL, selective invalidation)
+4. Processing files in parallel (Promise.all vs sequential)
+
 ## [0.2.0] - 2025-10-27
 
 ### The Journey

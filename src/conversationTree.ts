@@ -147,6 +147,14 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> =
     new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
 
+  /**
+   * Get formatted timestamp for logs
+   */
+  private getTimestamp(): string {
+    const now = new Date();
+    return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
+  }
+
   readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> =
     this._onDidChangeTreeData.event;
 
@@ -154,32 +162,45 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   private showWarmupOnly: boolean = false;
   private isLoading: boolean = false;
   private pendingRefresh: boolean = false;
+  private loadCompletedTime: number = 0;
+  private readonly LOAD_GRACE_PERIOD = 2000; // 2 seconds after load to ignore file events
 
   // Cache for conversations to avoid repeated file I/O
   private conversationCache: Map<string, Conversation[]> = new Map();
   private archivedConversationCache: Map<string, Conversation[]> = new Map();
   private cacheTimestamp: number = 0;
-  private readonly CACHE_TTL = 5000; // 5 second cache validity
+  private readonly CACHE_TTL = 60000; // 60 second cache validity
 
   constructor() {}
 
   /**
-   * Check if the tree is currently loading conversations
+   * Check if the tree is currently loading conversations or within grace period after load
    */
   isCurrentlyLoading(): boolean {
-    return this.isLoading;
+    if (this.isLoading) {
+      return true;
+    }
+
+    // Also return true if we're within the grace period after load completed
+    const timeSinceLoad = Date.now() - this.loadCompletedTime;
+    return timeSinceLoad < this.LOAD_GRACE_PERIOD;
   }
 
   /**
    * Mark the tree as loading (prevents file watcher refreshes during initial load)
    */
   setLoading(isLoading: boolean): void {
-    console.log(`[TreeProvider] setLoading: ${isLoading}`);
+    console.log(`[${this.getTimestamp()}] [TreeProvider] setLoading: ${isLoading}`);
     this.isLoading = isLoading;
+
+    // Record when load completed
+    if (!isLoading) {
+      this.loadCompletedTime = Date.now();
+    }
 
     // If we were loading and now finished, check if a refresh was pending
     if (!isLoading && this.pendingRefresh) {
-      console.log('[TreeProvider] Pending refresh triggered after load completed');
+      console.log(`[${this.getTimestamp()}] [TreeProvider] Pending refresh triggered after load completed`);
       this.pendingRefresh = false;
       this.refresh();
     }
@@ -203,15 +224,17 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     return this.showWarmupOnly ? 'Showing Warmup Conversations' : 'Hiding Warmup Conversations';
   }
 
-  refresh(): void {
+  refresh(invalidateCache: boolean = true): void {
     // If we're currently loading, queue the refresh for after load completes
     if (this.isLoading) {
-      console.log('[TreeProvider] Refresh requested during load, queuing for later');
+      console.log(`[${this.getTimestamp()}] [TreeProvider] Refresh requested during load, queuing for later`);
       this.pendingRefresh = true;
       return;
     }
 
-    this.invalidateCache();
+    if (invalidateCache) {
+      this.invalidateCache();
+    }
     this._onDidChangeTreeData.fire();
   }
 
@@ -305,7 +328,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     // Filter out warmup-only conversations unless user wants to see them
     const conversations = this.showWarmupOnly
       ? allConversations
-      : allConversations.filter(conv => showEmpty || FileOperations.hasRealMessages(conv.filePath));
+      : allConversations.filter(conv => showEmpty || conv.hasRealMessages);
 
     // Cache the conversations
     this.conversationCache.set(cacheKey, conversations);
@@ -400,7 +423,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     // Filter out warmup-only conversations unless user wants to see them
     const conversations = this.showWarmupOnly
       ? allConversations
-      : allConversations.filter(conv => showEmpty || FileOperations.hasRealMessages(conv.filePath));
+      : allConversations.filter(conv => showEmpty || conv.hasRealMessages);
 
     // Cache the conversations
     this.archivedConversationCache.set(cacheKey, conversations);

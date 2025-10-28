@@ -3,6 +3,14 @@ import { ConversationTreeProvider, ConversationTreeItem } from './conversationTr
 import { ConversationManager } from './conversationManager';
 import { ConversationViewer } from './conversationViewer';
 
+/**
+ * Get formatted timestamp for logs
+ */
+function getTimestamp(): string {
+  const now = new Date();
+  return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
+}
+
 export function activate(context: vscode.ExtensionContext) {
   console.log('Claude Code Conversation Manager activated');
 
@@ -31,7 +39,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Command: Refresh conversations
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeCodeConversationManager.refreshConversations', () => {
-      treeProvider.refresh();
+      // Manual refresh - invalidate cache to force full reload
+      treeProvider.refresh(true);
       vscode.window.showInformationMessage('Conversations refreshed');
     })
   );
@@ -256,7 +265,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Skip refresh if tree is currently loading - avoid interrupting the initial load
     if (treeProvider.isCurrentlyLoading()) {
-      console.log(`[FileWatcher] Ignoring file creation during load: ${uri.fsPath}`);
+      console.log(`[${getTimestamp()}] [FileWatcher] Ignoring file creation during load: ${uri.fsPath}`);
       return;
     }
 
@@ -267,10 +276,21 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // Set new debounced timer
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       createDebounceTimers.delete(uri.fsPath);
-      console.log(`[FileWatcher] New conversation detected: ${uri.fsPath}`);
-      treeProvider.refresh();
+
+      // Check if this is a warmup-only conversation before refreshing
+      const { FileOperations } = require('./fileOperations');
+      const hasRealMessages = await FileOperations.hasRealMessagesAsync(uri.fsPath);
+
+      if (!hasRealMessages) {
+        console.log(`[${getTimestamp()}] [FileWatcher] Ignoring warmup-only conversation: ${uri.fsPath}`);
+        return;
+      }
+
+      console.log(`[${getTimestamp()}] [FileWatcher] New conversation detected: ${uri.fsPath}`);
+      // Invalidate cache since a new file was added
+      treeProvider.refresh(true);
     }, DEBOUNCE_DELAY);
 
     createDebounceTimers.set(uri.fsPath, timer);
@@ -280,11 +300,11 @@ export function activate(context: vscode.ExtensionContext) {
   watcher.onDidDelete((uri) => {
     // Skip refresh if tree is currently loading
     if (treeProvider.isCurrentlyLoading()) {
-      console.log(`[FileWatcher] Ignoring file deletion during load: ${uri.fsPath}`);
+      console.log(`[${getTimestamp()}] [FileWatcher] Ignoring file deletion during load: ${uri.fsPath}`);
       return;
     }
 
-    console.log(`[FileWatcher] Conversation deleted: ${uri.fsPath}`);
+    console.log(`[${getTimestamp()}] [FileWatcher] Conversation deleted: ${uri.fsPath}`);
 
     // Clear any pending debounce for this file
     const existingTimer = debounceTimers.get(uri.fsPath);
@@ -293,7 +313,8 @@ export function activate(context: vscode.ExtensionContext) {
       debounceTimers.delete(uri.fsPath);
     }
 
-    treeProvider.refresh();
+    // Invalidate cache since a file was deleted
+    treeProvider.refresh(true);
   });
 
   // Handle file changes with debouncing and auto-update
@@ -305,7 +326,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Skip refresh if tree is currently loading
     if (treeProvider.isCurrentlyLoading()) {
-      console.log(`[FileWatcher] Ignoring file change during load: ${uri.fsPath}`);
+      console.log(`[${getTimestamp()}] [FileWatcher] Ignoring file change during load: ${uri.fsPath}`);
       return;
     }
 
@@ -316,22 +337,30 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // Set new debounced timer
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       debounceTimers.delete(uri.fsPath);
 
-      console.log(`[FileWatcher] Conversation modified: ${uri.fsPath}`);
+      // Check if this is a warmup-only conversation before refreshing
+      const { FileOperations } = require('./fileOperations');
+      const hasRealMessages = await FileOperations.hasRealMessagesAsync(uri.fsPath);
+
+      if (!hasRealMessages) {
+        console.log(`[${getTimestamp()}] [FileWatcher] Ignoring warmup-only conversation update: ${uri.fsPath}`);
+        return;
+      }
+
+      console.log(`[${getTimestamp()}] [FileWatcher] Conversation modified: ${uri.fsPath}`);
 
       // Check for stale leafUuid and auto-update
-      const { FileOperations } = require('./fileOperations');
       const wasUpdated = FileOperations.autoUpdateStaleLeafUuid(uri.fsPath);
 
       if (wasUpdated) {
-        console.log(`[FileWatcher] Auto-updated stale leafUuid for: ${uri.fsPath}`);
+        console.log(`[${getTimestamp()}] [FileWatcher] Auto-updated stale leafUuid for: ${uri.fsPath}`);
         vscode.window.showInformationMessage('Conversation title updated automatically');
       }
 
-      // Refresh tree view to show any changes
-      treeProvider.refresh();
+      // Refresh tree view to show any changes (invalidate cache since file content changed)
+      treeProvider.refresh(true);
     }, DEBOUNCE_DELAY);
 
     debounceTimers.set(uri.fsPath, timer);

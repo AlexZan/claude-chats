@@ -2,7 +2,7 @@
   "name": "claude-chats",
   "displayName": "Claude Chats",
   "description": "Rename, organize, and archive Claude Code conversations",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "publisher": "AlexZanfir",
   "author": {
     "name": "Alexander Zanfir"

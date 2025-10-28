@@ -43,6 +43,13 @@
 - Configurable archive location
 - Optional confirmation dialogs for safety
 
+### ⚡ Performance Optimized
+- **Fast parallel loading** - Handles 200+ conversations efficiently
+- **Smart caching** - 60-second cache for instant view updates
+- **Real-time file watching** - Automatic updates when conversations change
+- **Warmup filtering** - Ignores Claude Code's background warmup conversations
+- **Optimized filtering** - Single-pass parsing eliminates redundant file reads
+
 ### 🛡️ Safe & Reliable
 - Automatic backups before any modifications
 - Non-destructive operations
@@ -93,15 +100,6 @@ Working with Claude Code generates many conversations, but Claude Code doesn't p
 This is the real deal - actual data modification, not cosmetic changes.
 
 ## Installation
-
-### From Source (Development)
-
-1. Clone this repository
-2. Run `npm install`
-3. Run `npm run compile`
-4. Press F5 to launch Extension Development Host
-
-### From Marketplace
 
 1. Open VS Code
 2. Go to Extensions (`Ctrl+Shift+X` or `Cmd+Shift+X`)
@@ -179,7 +177,7 @@ This extension contributes the following settings:
 * `claudeChats.confirmArchive` - Show confirmation dialog before archiving (default: `true`)
 * `claudeChats.showArchivedInTree` - Show archived conversations in the tree view (default: `true`)
 * `claudeChats.groupBy` - How to group conversations: `project` or `date` (default: `project`)
-* `claudeChats.showEmptyConversations` - Show conversations with no actual user content (default: `false`)
+* `claudeChats.showEmptyConversations` - Show conversations with no actual user content, including warmup conversations (default: `false`)
 
 ## Commands
 
@@ -233,30 +231,6 @@ See [GitHub Issues](https://github.com/yourusername/claude-chats/issues) for cur
 ## Release Notes
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
-
-### 0.1.0
-
-Initial release of Claude Chats:
-- Conversation tree view with project/date grouping
-- Rename conversations with validation
-- Archive and restore functionality
-- Delete conversations
-- Configurable settings
-- Automatic backups
-
-## Troubleshooting
-
-### Conversation still appears after archiving
-
-- Make sure the conversation is not open in any VS Code window
-- Try refreshing the tree view (click refresh icon)
-- Reload VS Code window (`Ctrl+Shift+P` → "Developer: Reload Window")
-
-### "No conversations found"
-
-- Check that Claude Code extension is installed
-- Verify conversations exist in `~/.claude/projects/[project-name]/`
-- Check file permissions
 
 ## Contributing
 
