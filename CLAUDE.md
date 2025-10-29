@@ -1,0 +1,175 @@
+# Claude Code Conversation Manager - Development Guide
+
+This document contains important instructions for Claude when working on this project.
+
+## Project Overview
+
+This is a VS Code extension that manages Claude Code conversations (.jsonl files). It provides:
+- True conversation renaming (modifies actual .jsonl files)
+- Archive/restore functionality
+- Search across conversations
+- Custom viewer for conversation files
+- Lightning-fast performance (faster than native Claude Code)
+
+## Publishing Workflow
+
+**IMPORTANT**: Never publish to the marketplace without explicit user approval.
+
+### Pre-Publish Checklist
+
+1. **Update version number** in `package.json`
+2. **Update CHANGELOG.md** with changes
+3. **Update README.md** if user-facing features changed
+4. **Compile TypeScript**: `npm run compile`
+5. **Test the changes** - User should manually test critical paths
+6. **Commit changes**: `git add -A && git commit -m "..."`
+7. **Wait for user approval**
+
+### Publishing Steps (ONLY after user approval)
+
+```bash
+# Push to GitHub
+git push origin master
+
+# Publish to VS Code Marketplace
+npx @vscode/vsce publish
+```
+
+**Never run these commands without explicit user approval!**
+
+### Version Numbering
+
+- **Patch** (0.4.x): Bug fixes, small improvements
+- **Minor** (0.x.0): New features, non-breaking changes
+- **Major** (x.0.0): Breaking changes
+
+## Critical Implementation Notes
+
+### Performance Optimizations
+
+1. **Surgical File Parsing** ([src/fileOperations.ts:30-112](src/fileOperations.ts#L30-L112))
+   - `extractFastMetadataAsync()` reads only first 10 lines
+   - Extracts title from line 1 (summary) or line 4-5 (first user message)
+   - NEVER add `leafUuid` validation here - it breaks rename functionality
+   - Summaries can have `leafUuid` pointing beyond line 10 (normal for longer conversations)
+
+2. **Targeted Tree Refresh** ([src/conversationTree.ts:254-319](src/conversationTree.ts#L254-L319))
+   - `updateSingleConversation()` updates only changed conversation in cache
+   - File watcher calls this instead of full `refresh()`
+   - Path normalization is critical for Windows (case-insensitive, backslash vs forward slash)
+
+3. **File Watching** ([src/extension.ts:342-378](src/extension.ts#L342-L378))
+   - Only watches current project directory, not all Claude Code conversations
+   - 500ms debounce to batch rapid file changes
+   - Ignores warmup-only conversations
+   - Auto-updates stale leafUuid values
+
+### Common Pitfalls
+
+1. **Don't add leafUuid validation to title extraction**
+   - The `extractFastMetadataAsync()` function should accept ANY summary in the first 10 lines
+   - The `leafUuid` can point to messages at line 50+ in longer conversations
+   - This is normal and expected behavior
+
+2. **Always use targeted refresh for in-place file modifications**
+   - Rename: use `updateSingleConversation()`, not `refresh()`
+   - File saves: file watcher calls `updateSingleConversation()` automatically
+   - Archive/Restore: use `refresh()` because file path changes
+
+3. **Path normalization on Windows**
+   - Always normalize paths for comparison: `path.toLowerCase().replace(/\\/g, '/')`
+   - Windows paths can have different casing (`C:\` vs `c:\`)
+   - Backslashes vs forward slashes
+
+## Testing Checklist
+
+Before publishing:
+
+- [ ] Test rename functionality
+- [ ] Test archive/restore
+- [ ] Test search
+- [ ] Test file watching (save a conversation in Claude Code)
+- [ ] Test with 200+ conversations (performance)
+- [ ] Test on fresh VS Code reload
+- [ ] Verify no TypeScript errors: `npm run compile`
+
+## Architecture
+
+### Key Files
+
+- `src/extension.ts` - Extension entry point, command registration, file watching
+- `src/conversationTree.ts` - Tree view provider, caching, targeted refresh
+- `src/fileOperations.ts` - File I/O, metadata extraction, rename/archive operations
+- `src/conversationManager.ts` - High-level conversation operations
+- `src/conversationViewer.ts` - Custom webview for viewing conversations
+- `src/searchPanel.ts` - Search functionality
+
+### Data Flow
+
+1. Extension activates → creates TreeProvider
+2. TreeProvider loads conversations → calls `getAllConversationsAsync()`
+3. User action (rename, archive) → calls `ConversationManager` method
+4. Manager calls `FileOperations` to modify file
+5. File watcher detects change → calls `updateSingleConversation()` for targeted refresh
+6. TreeProvider updates cache and fires refresh event
+7. VS Code re-renders tree with updated data
+
+## GitHub Issues
+
+Track open issues at: https://github.com/AlexZan/claude-chats/issues
+
+### Working on an Issue
+
+1. **Check current open issues**: `gh issue list --state open`
+2. **Pick an issue** to work on
+3. **Reference issue in commit**: Use `Fixes #123` or `Closes #123` in commit message
+   - GitHub will automatically link the commit to the issue
+4. **Update CHANGELOG.md** with the fix
+5. **After publishing**, close the issue manually with details
+
+### Closing an Issue
+
+Use the GitHub CLI to close with a detailed comment:
+
+```bash
+gh issue close <number> --comment "Fixed in v0.x.x!
+
+**Implementation:**
+- Brief description of changes
+- Link to relevant code sections
+- Key technical details
+
+**Results:**
+- User-facing improvements
+- Performance metrics if applicable
+
+Commit: <commit-hash>"
+```
+
+**Example:**
+```bash
+gh issue close 13 --comment "Fixed in v0.4.7!
+
+**Implementation:**
+- Added updateSingleConversation() method
+- File watcher uses targeted refresh
+
+**Results:**
+- Updates in ~3ms instead of 2+ seconds
+- No full reload on file saves
+
+Commit: 3ac5fe1"
+```
+
+### Automatic Issue Closing
+
+GitHub can automatically close issues when commits are merged if you use keywords in commit messages:
+- `Fixes #123` - Closes issue #123
+- `Closes #123` - Closes issue #123
+- `Resolves #123` - Closes issue #123
+
+However, we prefer manual closing with detailed comments to provide better context.
+
+## Contact
+
+For questions or issues, contact user via GitHub issues.
