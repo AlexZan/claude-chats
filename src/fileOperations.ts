@@ -389,95 +389,55 @@ export class FileOperations {
    * 4. Last resort: first sidechain message (the "Warmup" message itself)
    */
   static getFirstUserMessage(messages: ConversationLine[]): ConversationMessage | null {
-    // First pass: look for non-sidechain user messages (actual conversation titles)
+    // Track candidates for each priority level (single pass)
+    let nonSidechainUserMsg: ConversationMessage | null = null;
+    let nonSidechainAnyMsg: ConversationMessage | null = null;
+    let sidechainAssistantMsg: ConversationMessage | null = null;
+    let anyMessageWithContent: ConversationMessage | null = null;
+
+    // Single pass through all messages
     for (const line of messages) {
+      // Skip metadata
       if ('_metadata' in line) {
         continue;
       }
-      if (!FileOperations.isConversationMessage(line)) {
-        continue;
-      }
-      if (line.isSidechain) {
-        continue;
-      }
-      if (line.type !== 'user') {
-        continue;
-      }
 
-      const text = FileOperations.extractText(line);
-      if (!text) {
-        continue;
-      }
-
-      // Skip warmup/initialization messages - look for actual conversation content
-      if (/^warmup$/i.test(text.trim())) {
-        continue;
-      }
-
-      return line; // Found the first real user message
-    }
-
-    // Second pass: look for non-sidechain messages of any type
-    for (const line of messages) {
-      if ('_metadata' in line) {
-        continue;
-      }
-      if (!FileOperations.isConversationMessage(line)) {
-        continue;
-      }
-      if (line.isSidechain) {
-        continue;
-      }
-
-      const text = FileOperations.extractText(line);
-      if (!text) {
-        continue;
-      }
-
-      return line; // Found the first real message (likely assistant)
-    }
-
-    // Third pass: for warmup-only conversations, use assistant initialization message
-    for (const line of messages) {
-      if ('_metadata' in line) {
-        continue;
-      }
-      if (!FileOperations.isConversationMessage(line)) {
-        continue;
-      }
-      if (!line.isSidechain) {
-        continue;
-      }
-      if (line.type !== 'assistant') {
-        continue;
-      }
-
-      const text = FileOperations.extractText(line);
-      if (!text || text === 'Warmup') {
-        continue;
-      }
-
-      return line; // Found assistant's warmup response
-    }
-
-    // Last resort: return any message with content
-    for (const line of messages) {
-      if ('_metadata' in line) {
-        continue;
-      }
+      // Only process conversation messages
       if (!FileOperations.isConversationMessage(line)) {
         continue;
       }
 
       const text = FileOperations.extractText(line);
-      if (!text || text === 'Warmup') {
-        continue;
+      const hasContent = !!text;
+
+      // Priority 1: Non-sidechain user message (best case - early exit)
+      if (!line.isSidechain && line.type === 'user' && hasContent) {
+        // Skip "warmup" text - look for actual conversation content
+        if (!/^warmup$/i.test(text.trim())) {
+          return line; // Found! Early exit for optimal performance
+        }
       }
 
-      return line;
+      // Priority 2: Non-sidechain message of any type (track first occurrence)
+      if (!line.isSidechain && hasContent && !nonSidechainAnyMsg) {
+        nonSidechainAnyMsg = line;
+      }
+
+      // Priority 3: Sidechain assistant message (for warmup-only conversations)
+      if (line.isSidechain && line.type === 'assistant' && hasContent && !sidechainAssistantMsg) {
+        if (text !== 'Warmup') {
+          sidechainAssistantMsg = line;
+        }
+      }
+
+      // Priority 4: Any message with content (last resort)
+      if (hasContent && !anyMessageWithContent) {
+        anyMessageWithContent = line;
+      }
     }
 
-    return null;
+    // Return best candidate found (priority order)
+    return nonSidechainAnyMsg || sidechainAssistantMsg || anyMessageWithContent || null;
   }
 
   /**
