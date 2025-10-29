@@ -12,6 +12,12 @@ export class FileOperations {
   private static readonly ARCHIVE_DIR = path.join(FileOperations.PROJECTS_DIR, '_archive');
 
   /**
+   * Cache for cross-file summary lookups to avoid O(n²) file scanning
+   * Key: projectDir path, Value: Map of leafUuid -> { summary, leafUuid }
+   */
+  private static crossFileSummaryCache = new Map<string, Map<string, { summary: string; leafUuid: string }>>();
+
+  /**
    * Get formatted timestamp for logs
    */
   private static getTimestamp(): string {
@@ -649,52 +655,28 @@ export class FileOperations {
    */
   private static findCrossFileSummaryWithUuid(filePath: string): { summary: string; leafUuid: string } | null {
     try {
-      // Get all message UUIDs from this file
-      const messages = FileOperations.parseConversation(filePath);
-      const messageUuids = new Set<string>();
-      for (const message of messages) {
-        if ('uuid' in message && message.uuid) {
-          messageUuids.add(message.uuid);
-        }
-      }
-
-      if (messageUuids.size === 0) {
-        return null;
-      }
-
-      // Get project directory (parent of this file)
       const projectDir = path.dirname(filePath);
 
-      // Search all other .jsonl files in the same project directory
-      const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl'));
+      // Check if we have a cached index for this project directory
+      if (!this.crossFileSummaryCache.has(projectDir)) {
+        // Build index once for the entire project directory
+        const index = this.buildCrossFileSummaryIndex(projectDir);
+        this.crossFileSummaryCache.set(projectDir, index);
+      }
 
-      for (const file of files) {
-        // Skip the current file
-        if (file === path.basename(filePath)) {
-          continue;
-        }
+      const index = this.crossFileSummaryCache.get(projectDir)!;
 
-        const otherFilePath = path.join(projectDir, file);
+      // Get all message UUIDs from this file
+      const messages = FileOperations.parseConversation(filePath);
 
-        try {
-          const otherMessages = FileOperations.parseConversation(otherFilePath);
-
-          // Look for summary messages with leafUuid pointing to our messages
-          for (const message of otherMessages) {
-            if (FileOperations.isSummaryMessage(message)) {
-              const leafUuid = message.leafUuid;
-              if (leafUuid && messageUuids.has(leafUuid)) {
-                const summary = message.summary;
-                // Skip warmup/initialization summaries
-                if (!/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
-                  return { summary, leafUuid };
-                }
-              }
-            }
+      // Check if any of our message UUIDs are referenced by a cross-file summary
+      for (const message of messages) {
+        if ('uuid' in message && message.uuid) {
+          const uuid = message.uuid;
+          if (index.has(uuid)) {
+            // Found a cross-file summary pointing to this message
+            return index.get(uuid)!;
           }
-        } catch (error) {
-          // Skip files that can't be parsed
-          continue;
         }
       }
 
@@ -711,6 +693,74 @@ export class FileOperations {
   private static findCrossFileSummary(filePath: string): string | null {
     const result = FileOperations.findCrossFileSummaryWithUuid(filePath);
     return result ? result.summary : null;
+  }
+
+  /**
+   * Build cross-file summary index for a project directory
+   * This scans all conversation files ONCE and builds a map of leafUuid -> summary
+   * Dramatically improves performance from O(n²) to O(n)
+   */
+  private static buildCrossFileSummaryIndex(projectDir: string): Map<string, { summary: string; leafUuid: string }> {
+    const index = new Map<string, { summary: string; leafUuid: string }>();
+
+    try {
+      const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl'));
+
+      for (const file of files) {
+        const filePath = path.join(projectDir, file);
+
+        try {
+          const messages = FileOperations.parseConversation(filePath);
+
+          // Look for summary messages with leafUuid
+          for (const message of messages) {
+            if (FileOperations.isSummaryMessage(message)) {
+              const leafUuid = message.leafUuid;
+              const summary = message.summary;
+
+              if (leafUuid && summary) {
+                // Skip warmup/initialization summaries
+                if (!/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+                  // Map leafUuid -> { summary, leafUuid }
+                  // If multiple summaries reference same leafUuid, use first non-warmup one
+                  if (!index.has(leafUuid)) {
+                    index.set(leafUuid, { summary, leafUuid });
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Skip files that can't be parsed
+          continue;
+        }
+      }
+
+      console.log(`[${this.getTimestamp()}] [FileOps] Built cross-file summary index for ${projectDir}: ${index.size} summaries`);
+    } catch (error) {
+      console.error(`[${this.getTimestamp()}] [FileOps] Error building cross-file index:`, error);
+    }
+
+    return index;
+  }
+
+  /**
+   * Invalidate cross-file summary cache for a specific project directory
+   * Should be called when files in the directory are added/modified/deleted
+   */
+  static invalidateCrossFileSummaryCache(projectDir: string): void {
+    if (this.crossFileSummaryCache.has(projectDir)) {
+      console.log(`[${this.getTimestamp()}] [FileOps] Invalidating cross-file cache for ${projectDir}`);
+      this.crossFileSummaryCache.delete(projectDir);
+    }
+  }
+
+  /**
+   * Clear all cross-file summary caches
+   */
+  static clearCrossFileSummaryCache(): void {
+    console.log(`[${this.getTimestamp()}] [FileOps] Clearing all cross-file caches`);
+    this.crossFileSummaryCache.clear();
   }
 
   /**
@@ -1477,65 +1527,38 @@ export class FileOperations {
             try {
               const stats = await fs.promises.stat(filePath);
 
-              // Parse once and extract all needed metadata
-              let messages: ConversationLine[];
+              // Use fast metadata extraction (only reads first 10 lines)
+              let fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean };
               try {
-                messages = await FileOperations.parseConversationAsync(filePath);
-              } catch (parseError) {
-                console.error(`[FileOps] Failed to parse archived conversation async ${filePath}:`, parseError);
-                return null;
-              }
-
-              let metadata: any;
-              try {
-                metadata = FileOperations.extractConversationMetadata(messages, filePath);
+                fastMetadata = await FileOperations.extractFastMetadataAsync(filePath);
               } catch (metaError) {
                 console.error(`[FileOps] Failed to extract metadata from archived ${filePath}:`, metaError);
                 return null;
               }
 
               // Skip empty conversations if setting is disabled
-              if (!showEmpty && !metadata.hasRealMessages) {
+              if (!showEmpty && !fastMetadata.hasRealMessages) {
                 return null;
               }
 
-              // Get conversation timestamp (matches Claude Code behavior)
-              // Priority 2: Use last message timestamp (most recent activity)
-              // Priority 3: Fall back to file mtime
-              // Note: Skip cross-file summary search (Priority 1) during initial load to avoid O(n²) file parsing
-              let lastMessageTime = metadata.lastMessageTime;
-              let actualLastMessageTime = metadata.lastMessageTime;
-
-              // Cross-file summary search is skipped during async load
-              // This will be populated lazily when needed by the tree item renderer
-              // let crossFileSummary: any;
-              // try {
-              //   crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
-              // } catch (cfError) {
-              //   console.error(`[FileOps] Failed to find cross-file summary for archived ${filePath}:`, cfError);
-              //   crossFileSummary = null;
-              // }
-
-              // if (crossFileSummary) {
-              //   // Find the message with this UUID to get its timestamp
-              //   const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
-              //   if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
-              //     lastMessageTime = new Date(leafMessage.timestamp);
-              //     actualLastMessageTime = lastMessageTime;
-              //   }
-              // }
+              // Use file mtime for timestamps (fast, no parsing needed)
+              // This matches Claude Code's behavior - they prioritize file system metadata
+              const lastMessageTime = stats.mtime;
+              const actualLastMessageTime = stats.mtime;
 
               return {
                 id: path.parse(file).name,
-                title: metadata.title,
+                title: fastMetadata.title,
                 filePath,
                 project: projectDir,
                 lastModified: stats.mtime,
                 lastMessageTime: lastMessageTime,
                 actualLastMessageTime: actualLastMessageTime,
-                messageCount: messages.length,
+                messageCount: 0, // Set to 0 for now, can calculate if needed
                 fileSize: stats.size,
-                isArchived: true
+                isArchived: true,
+                hasRealMessages: fastMetadata.hasRealMessages,
+                isHidden: fastMetadata.isHidden
               };
             } catch (error) {
               console.error(`[FileOps] Unexpected error parsing archived conversation ${filePath}:`, error);

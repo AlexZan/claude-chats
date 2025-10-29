@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ConversationTreeProvider, ConversationTreeItem } from './conversationTree';
 import { ConversationManager } from './conversationManager';
 import { ConversationViewer } from './conversationViewer';
+import { debugActiveTab, startTabMonitoring } from './debugTabInfo';
 
 /**
  * Get formatted timestamp for logs
@@ -248,6 +249,17 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Command: Debug active tab info (temporary for research)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'claudeCodeConversationManager.debugTabInfo',
+      debugActiveTab
+    )
+  );
+
+  // Optional: Start tab monitoring (uncomment to enable)
+  // startTabMonitoring(context);
+
   // Watch for Claude Code conversation file changes with intelligent auto-update
   // Only watch the current project directory to avoid unnecessary refreshes
   const path = require('path');
@@ -301,6 +313,12 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       console.log(`[${getTimestamp()}] [FileWatcher] New conversation detected: ${uri.fsPath}`);
+
+      // Invalidate cross-file summary cache for this project
+      const path = require('path');
+      const projectDir = path.dirname(uri.fsPath);
+      FileOperations.invalidateCrossFileSummaryCache(projectDir);
+
       // Invalidate cache since a new file was added
       treeProvider.refresh(true);
     }, DEBOUNCE_DELAY);
@@ -324,6 +342,12 @@ export function activate(context: vscode.ExtensionContext) {
       clearTimeout(existingTimer);
       debounceTimers.delete(uri.fsPath);
     }
+
+    // Invalidate cross-file summary cache for this project
+    const { FileOperations } = require('./fileOperations');
+    const path = require('path');
+    const projectDir = path.dirname(uri.fsPath);
+    FileOperations.invalidateCrossFileSummaryCache(projectDir);
 
     // Invalidate cache since a file was deleted
     treeProvider.refresh(true);
@@ -369,6 +393,11 @@ export function activate(context: vscode.ExtensionContext) {
       if (wasUpdated) {
         console.log(`[${getTimestamp()}] [FileWatcher] Auto-updated stale leafUuid for: ${uri.fsPath}`);
         vscode.window.showInformationMessage('Conversation title updated automatically');
+
+        // Invalidate cross-file cache since leafUuid might have changed
+        const path = require('path');
+        const projectDir = path.dirname(uri.fsPath);
+        FileOperations.invalidateCrossFileSummaryCache(projectDir);
       }
 
       // Use targeted refresh - only updates this specific conversation in cache
