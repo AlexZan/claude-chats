@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { FileOperations } from './fileOperations';
 import { ConversationMessage } from './types';
 import { ConversationTreeItem } from './conversationTree';
+import { MessageContentExtractor } from './utils/messageContentExtractor';
 
 /**
  * Manages the conversation viewer webview panel
@@ -330,32 +331,13 @@ export class ConversationViewer {
    * Extract text content from a message
    */
   private extractContent(message: ConversationMessage): string {
-    if (!message.message || !message.message.content) {
-      return '';
-    }
-
-    const { content } = message.message;
-
-    if (typeof content === 'string') {
-      return content;
-    }
-
-    if (Array.isArray(content)) {
-      return content
-        .map(item => {
-          if (item.type === 'text' && item.text) {
-            return item.text;
-          }
-          if (item.type === 'tool_use') {
-            return `[Tool: ${item.name}]\n${JSON.stringify(item.input, null, 2)}`;
-          }
-          return '';
-        })
-        .filter(text => text.length > 0)
-        .join('\n\n');
-    }
-
-    return '';
+    // Use centralized content extractor
+    // Show all content including tool_use, joined with double newlines
+    return MessageContentExtractor.extractText(message, {
+      filterSystemMetadata: false,  // Show all content in viewer
+      includeToolUse: true,          // Show tool blocks
+      joinWith: '\n\n'               // Join with double newlines
+    });
   }
 
   /**

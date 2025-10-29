@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ConversationMessage, Conversation, ConversationLine, SummaryMessage } from './types';
+import { MessageContentExtractor } from './utils/messageContentExtractor';
 
 /**
  * Helper class for safe file operations on conversation files
@@ -50,17 +51,12 @@ export class FileOperations {
    * Handles both string and array content formats
    */
   private static extractUserVisibleText(content: string | Array<{ type: string; text?: string }>): string {
-    if (typeof content === 'string') {
-      // String content - return if not system metadata
-      return this.isSystemMetadata(content) ? '' : content;
-    } else if (Array.isArray(content)) {
-      // Array content - filter and concatenate non-metadata text items
-      return content
-        .filter(item => item.type === 'text' && item.text && !this.isSystemMetadata(item.text))
-        .map(item => item.text)
-        .join(' ');
-    }
-    return '';
+    // Use centralized content extractor
+    return MessageContentExtractor.extractTextFromContent(content, {
+      filterSystemMetadata: true,
+      returnFirstOnly: false,
+      joinWith: ' '
+    });
   }
 
   /**
