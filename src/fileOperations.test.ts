@@ -386,3 +386,303 @@ describe('FileOperations - Message Validation', () => {
     });
   });
 });
+
+describe('FileOperations - Metadata Extraction', () => {
+  beforeEach(() => {
+    if (!fs.existsSync(TEST_DIR)) {
+      fs.mkdirSync(TEST_DIR, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    cleanupTestFiles();
+  });
+
+  describe('extractFastMetadata (sync)', () => {
+    it('should extract title from summary message', () => {
+      const content = `{"type":"summary","summary":"Test Conversation Title","leafUuid":"uuid-123"}
+{"type":"user","message":{"content":"Hello"},"isSidechain":false,"uuid":"uuid-123"}`;
+      const filePath = createTestFile('with-summary.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.title).toBe('Test Conversation Title');
+      expect(result.hasRealMessages).toBe(true);
+      expect(result.isHidden).toBe(false);
+    });
+
+    it('should extract title from first user message when no summary', () => {
+      const content = `{"type":"user","message":{"content":"First user message here"},"isSidechain":false,"uuid":"uuid-123"}`;
+      const filePath = createTestFile('no-summary.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.title).toBe('First user message here');
+      expect(result.hasRealMessages).toBe(true);
+    });
+
+    it('should skip warmup summaries', () => {
+      const content = `{"type":"summary","summary":"Warmup for assistant readiness","leafUuid":"uuid-1"}
+{"type":"summary","summary":"Real Conversation Title","leafUuid":"uuid-2"}
+{"type":"user","message":{"content":"Hello"},"isSidechain":false}`;
+      const filePath = createTestFile('with-warmup.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.title).toBe('Real Conversation Title');
+    });
+
+    it('should detect hasRealMessages=false for warmup-only', () => {
+      const content = `{"type":"user","message":{"content":"Warmup"},"isSidechain":true}`;
+      const filePath = createTestFile('warmup-only-metadata.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.hasRealMessages).toBe(false);
+    });
+
+    it('should detect isHidden=true for cross-file summary', () => {
+      const content = `{"type":"summary","summary":"Linked Conversation","leafUuid":"external-uuid-999"}
+{"type":"user","message":{"content":"Hello"},"isSidechain":false,"uuid":"uuid-123"}`;
+      const filePath = createTestFile('hidden-conversation.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.isHidden).toBe(true);
+    });
+
+    it('should detect isHidden=false for local summary', () => {
+      const content = `{"type":"summary","summary":"Local Conversation","leafUuid":"uuid-123"}
+{"type":"user","message":{"content":"Hello"},"isSidechain":false,"uuid":"uuid-123"}`;
+      const filePath = createTestFile('local-conversation.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.isHidden).toBe(false);
+    });
+
+    it('should return Untitled for empty file', () => {
+      const filePath = createTestFile('empty-metadata.jsonl', '');
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.title).toBe('Untitled');
+      expect(result.hasRealMessages).toBe(false);
+      expect(result.isHidden).toBe(false);
+    });
+
+    it('should truncate long user message to 100 chars', () => {
+      const longMessage = 'A'.repeat(150);
+      const content = `{"type":"user","message":{"content":"${longMessage}"},"isSidechain":false}`;
+      const filePath = createTestFile('long-message.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.title).toHaveLength(100);
+      expect(result.title).toBe('A'.repeat(100));
+    });
+
+    it('should handle multiline user message (take first line)', () => {
+      const content = `{"type":"user","message":{"content":"First line\\nSecond line\\nThird line"},"isSidechain":false}`;
+      const filePath = createTestFile('multiline.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.title).toBe('First line');
+    });
+
+    it('should handle malformed JSON gracefully', () => {
+      const filePath = createTestFile('malformed-metadata.jsonl', '{invalid json}');
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      expect(result.title).toBe('Untitled');
+      expect(result.hasRealMessages).toBe(false);
+    });
+
+    it('should only read first 10 lines (performance optimization)', () => {
+      // Create a file with summary at line 11 (should be skipped)
+      const lines = [];
+      for (let i = 0; i < 10; i++) {
+        lines.push(`{"type":"user","message":{"content":"Line ${i}"},"isSidechain":true}`);
+      }
+      lines.push(`{"type":"summary","summary":"This should be ignored","leafUuid":"uuid-999"}`);
+
+      const content = lines.join('\n');
+      const filePath = createTestFile('beyond-10-lines.jsonl', content);
+
+      const result = FileOperations.extractFastMetadata(filePath);
+
+      // Should use first user message, not the summary at line 11
+      expect(result.title).toBe('Line 0');
+    });
+  });
+
+  describe('extractFastMetadataAsync (async)', () => {
+    it('should extract title from summary message', async () => {
+      const content = `{"type":"summary","summary":"Async Test Title","leafUuid":"uuid-123"}
+{"type":"user","message":{"content":"Hello"},"isSidechain":false}`;
+      const filePath = createTestFile('async-summary.jsonl', content);
+
+      const result = await FileOperations.extractFastMetadataAsync(filePath);
+
+      expect(result.title).toBe('Async Test Title');
+      expect(result.hasRealMessages).toBe(true);
+    });
+
+    it('should produce same result as sync version', async () => {
+      const content = `{"type":"summary","summary":"Consistency Test","leafUuid":"uuid-123"}
+{"type":"user","message":{"content":"Test message"},"isSidechain":false,"uuid":"uuid-123"}`;
+      const filePath = createTestFile('sync-async-metadata.jsonl', content);
+
+      const syncResult = FileOperations.extractFastMetadata(filePath);
+      const asyncResult = await FileOperations.extractFastMetadataAsync(filePath);
+
+      expect(syncResult).toEqual(asyncResult);
+    });
+
+    it('should handle empty file asynchronously', async () => {
+      const filePath = createTestFile('empty-async-metadata.jsonl', '');
+
+      const result = await FileOperations.extractFastMetadataAsync(filePath);
+
+      expect(result.title).toBe('Untitled');
+      expect(result.hasRealMessages).toBe(false);
+    });
+
+    it('should detect isHidden correctly in async mode', async () => {
+      const content = `{"type":"summary","summary":"Hidden Async","leafUuid":"external-uuid"}
+{"type":"user","message":{"content":"Message"},"isSidechain":false,"uuid":"local-uuid"}`;
+      const filePath = createTestFile('hidden-async.jsonl', content);
+
+      const result = await FileOperations.extractFastMetadataAsync(filePath);
+
+      expect(result.isHidden).toBe(true);
+    });
+  });
+
+  describe('buildConversationObject', () => {
+    it('should build conversation object with all required fields', () => {
+      const testFile = 'test-conv.jsonl';
+      const testPath = path.join(TEST_DIR, testFile);
+      const content = `{"type":"summary","summary":"Test Conv","leafUuid":"uuid-1"}`;
+      fs.writeFileSync(testPath, content);
+
+      const stats = fs.statSync(testPath);
+      const metadata = { title: 'Test Conv', hasRealMessages: true, isHidden: false };
+
+      const FileOpsClass = FileOperations as any;
+      const result = FileOpsClass.buildConversationObject(
+        testFile,
+        testPath,
+        'test-project',
+        stats,
+        metadata,
+        false
+      );
+
+      expect(result.id).toBe('test-conv');
+      expect(result.title).toBe('Test Conv');
+      expect(result.filePath).toBe(testPath);
+      expect(result.project).toBe('test-project');
+      expect(result.lastModified).toEqual(stats.mtime);
+      expect(result.lastMessageTime).toEqual(stats.mtime);
+      expect(result.messageCount).toBe(0);
+      expect(result.isArchived).toBe(false);
+      expect(result.hasRealMessages).toBe(true);
+      expect(result.isHidden).toBe(false);
+    });
+
+    it('should set isArchived=true when specified', () => {
+      const testFile = 'archived-conv.jsonl';
+      const testPath = path.join(TEST_DIR, testFile);
+      const content = `{"type":"summary","summary":"Archived","leafUuid":"uuid-1"}`;
+      fs.writeFileSync(testPath, content);
+
+      const stats = fs.statSync(testPath);
+      const metadata = { title: 'Archived', hasRealMessages: true, isHidden: false };
+
+      const FileOpsClass = FileOperations as any;
+      const result = FileOpsClass.buildConversationObject(
+        testFile,
+        testPath,
+        'test-project',
+        stats,
+        metadata,
+        true // isArchived
+      );
+
+      expect(result.isArchived).toBe(true);
+    });
+
+    it('should handle conversations without real messages', () => {
+      const testFile = 'warmup-conv.jsonl';
+      const testPath = path.join(TEST_DIR, testFile);
+      const content = `{"type":"user","message":{"content":"Warmup"},"isSidechain":true}`;
+      fs.writeFileSync(testPath, content);
+
+      const stats = fs.statSync(testPath);
+      const metadata = { title: 'Warmup Only', hasRealMessages: false, isHidden: false };
+
+      const FileOpsClass = FileOperations as any;
+      const result = FileOpsClass.buildConversationObject(
+        testFile,
+        testPath,
+        'test-project',
+        stats,
+        metadata,
+        false
+      );
+
+      expect(result.hasRealMessages).toBe(false);
+      expect(result.messageCount).toBe(0);
+    });
+
+    it('should handle hidden conversations', () => {
+      const testFile = 'hidden-conv.jsonl';
+      const testPath = path.join(TEST_DIR, testFile);
+      const content = `{"type":"summary","summary":"Hidden","leafUuid":"external"}`;
+      fs.writeFileSync(testPath, content);
+
+      const stats = fs.statSync(testPath);
+      const metadata = { title: 'Hidden', hasRealMessages: true, isHidden: true };
+
+      const FileOpsClass = FileOperations as any;
+      const result = FileOpsClass.buildConversationObject(
+        testFile,
+        testPath,
+        'test-project',
+        stats,
+        metadata,
+        false
+      );
+
+      expect(result.isHidden).toBe(true);
+    });
+
+    it('should use file mtime for timestamps', () => {
+      const testFile = 'timestamp-test.jsonl';
+      const testPath = path.join(TEST_DIR, testFile);
+      const content = `{"type":"summary","summary":"Test","leafUuid":"uuid-1"}`;
+      fs.writeFileSync(testPath, content);
+
+      const stats = fs.statSync(testPath);
+      const metadata = { title: 'Test', hasRealMessages: true, isHidden: false };
+
+      const FileOpsClass = FileOperations as any;
+      const result = FileOpsClass.buildConversationObject(
+        testFile,
+        testPath,
+        'test-project',
+        stats,
+        metadata,
+        false
+      );
+
+      // Should use mtime for all timestamp fields
+      expect(result.lastModified).toEqual(stats.mtime);
+      expect(result.lastMessageTime).toEqual(stats.mtime);
+      expect(result.actualLastMessageTime).toEqual(stats.mtime);
+    });
+  });
+});
