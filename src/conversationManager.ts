@@ -300,4 +300,77 @@ export class ConversationManager {
 
     return partialMatches;
   }
+
+  /**
+   * Detect or select the current conversation
+   * Returns the conversation or null if user cancelled
+   */
+  async detectOrSelectConversation(): Promise<Conversation | null> {
+    const { getActiveClaudeCodeChatTab, getChatTitleFromTab } = require('./claudeCodeDetection');
+
+    // Try 1: Check if .jsonl file is open in text editor
+    const conversationId = this.getCurrentConversationId();
+    if (conversationId) {
+      const conversation = this.findConversationById(conversationId);
+      if (conversation) {
+        return conversation;
+      }
+    }
+
+    // Try 2: Check if Claude Code chat tab is active
+    const claudeTab = getActiveClaudeCodeChatTab();
+    if (claudeTab) {
+      const tabLabel = getChatTitleFromTab(claudeTab);
+      const matches = this.findConversationsByTitle(tabLabel);
+
+      if (matches.length === 1) {
+        // Single match - high confidence
+        return matches[0];
+      } else if (matches.length > 1) {
+        // Multiple matches - show picker to disambiguate
+        const items = matches.map(c => ({
+          label: c.title,
+          description: c.isArchived ? '📦 Archived' : '',
+          detail: `Last modified: ${c.lastModified.toLocaleString()}`,
+          conversation: c
+        }));
+
+        const selected = await vscode.window.showQuickPick(items, {
+          placeHolder: `Multiple conversations match "${tabLabel}". Select one:`,
+          matchOnDescription: true
+        });
+
+        return selected ? selected.conversation : null;
+      }
+    }
+
+    // Try 3: No match found - show all conversations sorted by recent
+    const allConversations = [
+      ...FileOperations.getAllConversations(),
+      ...FileOperations.getArchivedConversations()
+    ];
+
+    if (allConversations.length === 0) {
+      vscode.window.showErrorMessage('No conversations found.');
+      return null;
+    }
+
+    // Sort by last modified (most recent first)
+    allConversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+
+    const items = allConversations.map(c => ({
+      label: c.title,
+      description: c.isArchived ? '📦 Archived' : '',
+      detail: `Last modified: ${c.lastModified.toLocaleString()}`,
+      conversation: c
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Select a conversation',
+      matchOnDescription: true,
+      matchOnDetail: true
+    });
+
+    return selected ? selected.conversation : null;
+  }
 }

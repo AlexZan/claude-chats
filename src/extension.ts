@@ -311,14 +311,104 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // Status bar button for quick rename (shows only when Claude Code chat is active)
+  // Command: Show Claude Chats menu (status bar quick actions)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'claudeCodeConversationManager.showClaudeChatsMenu',
+      async () => {
+        // Detect or select the conversation
+        const conversation = await manager.detectOrSelectConversation();
+        if (!conversation) {
+          return; // User cancelled or no conversations
+        }
+
+        // Build menu items based on conversation state
+        const isDone = conversation.title.startsWith('✓');
+        const isArchived = conversation.isArchived;
+
+        const menuItems: vscode.QuickPickItem[] = [
+          {
+            label: '$(edit) Rename',
+            detail: 'Change conversation title'
+          },
+          {
+            label: isDone ? '$(circle-outline) Mark as Undone' : '$(check) Mark as Done',
+            detail: isDone ? 'Remove done checkmark' : 'Add done checkmark to title'
+          },
+          {
+            label: isArchived ? '$(archive) Restore' : '$(archive) Archive',
+            detail: isArchived ? 'Restore from archive' : 'Move to archive'
+          },
+          {
+            label: '',
+            kind: vscode.QuickPickItemKind.Separator
+          },
+          {
+            label: '$(export) Export to Markdown',
+            detail: 'Save conversation as .md file'
+          },
+          {
+            label: '$(trash) Delete',
+            detail: 'Permanently delete conversation'
+          }
+        ];
+
+        const selected = await vscode.window.showQuickPick(menuItems, {
+          placeHolder: `Actions for: ${conversation.title}`
+        });
+
+        if (!selected) {
+          return; // User cancelled
+        }
+
+        // Execute the selected action
+        if (selected.label.includes('Rename')) {
+          // Rename action
+          const newTitle = await vscode.window.showInputBox({
+            prompt: 'Enter new conversation title',
+            value: conversation.title,
+            validateInput: (value) => {
+              return value.trim() ? null : 'Title cannot be empty';
+            }
+          });
+
+          if (newTitle) {
+            await manager.rename(conversation, newTitle);
+            await treeProvider.updateSingleConversation(conversation.filePath);
+            vscode.window.showInformationMessage('Conversation renamed. Close and reopen chat tab to see updated title.');
+          }
+        } else if (selected.label.includes('Done') || selected.label.includes('Undone')) {
+          // Toggle done action
+          await manager.toggleDone(conversation);
+          await treeProvider.updateSingleConversation(conversation.filePath);
+        } else if (selected.label.includes('Archive') || selected.label.includes('Restore')) {
+          // Archive/Restore action
+          if (isArchived) {
+            await manager.restore(conversation);
+          } else {
+            await manager.archive(conversation);
+          }
+          treeProvider.refresh();
+        } else if (selected.label.includes('Export')) {
+          // Export action
+          await manager.exportToMarkdown(conversation);
+        } else if (selected.label.includes('Delete')) {
+          // Delete action
+          await manager.delete(conversation);
+          treeProvider.refresh();
+        }
+      }
+    )
+  );
+
+  // Status bar button for Claude Chats menu (shows only when Claude Code chat is active)
   const statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     100
   );
-  statusBarItem.command = 'claudeCodeConversationManager.renameCurrentConversation';
-  statusBarItem.text = '$(edit) Rename';
-  statusBarItem.tooltip = 'Rename current Claude Code conversation';
+  statusBarItem.command = 'claudeCodeConversationManager.showClaudeChatsMenu';
+  statusBarItem.text = '$(comment-discussion) Claude Chats';
+  statusBarItem.tooltip = 'Quick actions for Claude Code conversation';
 
   // Function to update status bar button visibility
   function updateStatusBarVisibility() {

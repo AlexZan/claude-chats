@@ -20,16 +20,18 @@
 - **Group by Project or Date** - Organize conversations the way you work
 - **Smart Search** - Fast full-text search with progress feedback, scoped to current project
 
-### ✏️ True Conversation Renaming
-- **Quick Rename Button** - Status bar button appears when Claude Code chat is active - one-click rename without sidebar!
+### ✏️ True Conversation Renaming & Quick Actions
+- **Claude Chats Menu** - Status bar button with full action menu when Claude Code chat is active!
+- **One-Click Access** - Rename, mark as done, archive, export, or delete - all from one button
 - **Smart Detection** - Automatically detects active chat and finds the right conversation (80%+ success rate)
+- **State-Aware Menu** - Shows relevant actions (Archive/Restore, Done/Undone) based on conversation state
 - **Actually modifies the conversation data** - not just a display name in this extension
 - **Automatic maintenance** - File watcher keeps renamed titles working during active conversations
 - Changes persist in Claude Code's native interface
 - Renames appear everywhere: sidebar, conversation history, recent files
 - Uses summary-based renaming with automatic `leafUuid` updates
 - Smart validation prevents naming conflicts
-- Rename from tree view, command palette, or status bar button
+- Access from tree view, command palette, or status bar menu
 
 ### 📖 Beautiful Conversation Viewer
 - **Custom chat-like viewer** - Opens instead of raw `.jsonl` files
@@ -65,7 +67,8 @@
 - Works with existing Claude Code conversation structure
 
 ### ⚡ Quick Access
-- **Status Bar Button** - Rename button appears when Claude Code chat is active (can be disabled in settings)
+- **Claude Chats Menu Button** - Full action menu appears when Claude Code chat is active (can be disabled in settings)
+- **5 Quick Actions** - Rename, mark done, archive, export, or delete from one menu
 - **Command Palette** - Access all features via `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
 - **Context Menus** - Right-click conversations for quick actions
 - **Inline Actions** - Rename and archive with one click
@@ -126,12 +129,23 @@ Or install directly from the [VS Code Marketplace](https://marketplace.visualstu
 2. Browse conversations grouped by project
 3. Expand "Active Conversations" or "Archived Conversations"
 
-### Rename a Conversation
+### Quick Actions Menu
 
 **From Status Bar (Quickest):**
 1. Open a Claude Code chat
-2. Click the "✏️ Rename" button in the status bar (bottom-right)
-3. Enter new title
+2. Click the "💬 Claude Chats" button in the status bar (bottom-right)
+3. Select an action from the menu:
+   - ✏️ **Rename** - Change conversation title
+   - ✓ **Mark as Done/Undone** - Toggle completion status
+   - 📦 **Archive/Restore** - Move to/from archive
+   - 📋 **Export to Markdown** - Save as .md file
+   - 🗑️ **Delete** - Permanently remove
+
+The menu button automatically appears when you're viewing a Claude Code chat and disappears when you switch to other files. It uses smart fuzzy matching to find the right conversation (works in 80%+ of cases without any picker needed). Menu items are state-aware - showing "Archive" or "Restore", "Done" or "Undone" based on current state.
+
+**⚠️ Important:** After renaming, close and reopen the Claude Code chat tab to see the updated title. Claude Code caches tab titles and won't reflect changes until the tab is reloaded.
+
+### Rename from Tree View or Command Palette
 
 **From Tree View:**
 1. Right-click a conversation
@@ -142,10 +156,6 @@ Or install directly from the [VS Code Marketplace](https://marketplace.visualstu
 1. Open a Claude Code chat or `.jsonl` conversation file
 2. Press `Ctrl+Shift+P`
 3. Run "Claude Code: Rename Current Conversation"
-
-The status bar button automatically appears when you're viewing a Claude Code chat and disappears when you switch to other files. It uses smart fuzzy matching to find the right conversation (works in 80%+ of cases without any picker needed).
-
-**⚠️ Important:** After renaming, close and reopen the Claude Code chat tab to see the updated title. Claude Code caches tab titles and won't reflect changes until the tab is reloaded.
 
 ### Mark as Done/Undone
 
