@@ -248,6 +248,77 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   /**
+   * Update a single conversation in the cache without reloading everything
+   * This is much faster than invalidating the entire cache
+   */
+  async updateSingleConversation(filePath: string): Promise<void> {
+    try {
+      // Extract fast metadata for the updated file
+      const metadata = await FileOperations.extractFastMetadataAsync(filePath);
+      const stats = await require('fs').promises.stat(filePath);
+      const path = require('path');
+
+      // Create updated conversation object
+      const updatedConversation: Conversation = {
+        id: path.parse(filePath).name,
+        title: metadata.title,
+        filePath: filePath,
+        project: path.basename(path.dirname(filePath)),
+        lastModified: stats.mtime,
+        lastMessageTime: stats.mtime,
+        actualLastMessageTime: stats.mtime,
+        messageCount: 0,
+        fileSize: stats.size,
+        isArchived: filePath.includes('_archive'),
+        hasRealMessages: metadata.hasRealMessages,
+        isHidden: metadata.isHidden
+      };
+
+      // Update in the appropriate cache
+      let cacheUpdated = false;
+      if (updatedConversation.isArchived) {
+        const archiveCacheKey = `archived_${this.showWarmupOnly}`;
+        const archivedCache = this.archivedConversationCache.get(archiveCacheKey);
+        if (archivedCache) {
+          // Normalize paths for comparison (Windows path separators and casing)
+          const normalizedFilePath = filePath.toLowerCase().replace(/\\/g, '/');
+          const index = archivedCache.findIndex(c => c.filePath.toLowerCase().replace(/\\/g, '/') === normalizedFilePath);
+          if (index !== -1) {
+            archivedCache[index] = updatedConversation;
+            cacheUpdated = true;
+          }
+        }
+      } else {
+        const activeCacheKey = `active_${this.showWarmupOnly}`;
+        const activeCache = this.conversationCache.get(activeCacheKey);
+        if (activeCache) {
+          // Normalize paths for comparison (Windows path separators and casing)
+          const normalizedFilePath = filePath.toLowerCase().replace(/\\/g, '/');
+          const index = activeCache.findIndex(c => c.filePath.toLowerCase().replace(/\\/g, '/') === normalizedFilePath);
+          if (index !== -1) {
+            activeCache[index] = updatedConversation;
+            cacheUpdated = true;
+          }
+        }
+      }
+
+      if (cacheUpdated) {
+        // Fire refresh without invalidating cache - VS Code will use the updated cache
+        this._onDidChangeTreeData.fire();
+      } else {
+        // Cache doesn't exist or conversation not in cache - do full refresh
+        this.invalidateCache();
+        this._onDidChangeTreeData.fire();
+      }
+    } catch (error) {
+      console.error(`[${this.getTimestamp()}] [TreeProvider] Failed to update single conversation ${filePath}:`, error);
+      // Fall back to full refresh on error
+      this.invalidateCache();
+      this._onDidChangeTreeData.fire();
+    }
+  }
+
+  /**
    * Invalidate cache for a specific file path
    */
   invalidateCacheForFile(filePath: string): void {

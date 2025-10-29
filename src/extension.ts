@@ -97,7 +97,8 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         await manager.rename(item.conversation, newTitle);
-        treeProvider.refresh();
+        // Use targeted refresh instead of full reload
+        await treeProvider.updateSingleConversation(item.conversation.filePath);
       }
     )
   );
@@ -138,7 +139,8 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         await manager.rename(conversation, newTitle);
-        treeProvider.refresh();
+        // Use targeted refresh instead of full reload
+        await treeProvider.updateSingleConversation(conversation.filePath);
       }
     )
   );
@@ -369,8 +371,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage('Conversation title updated automatically');
       }
 
-      // Refresh tree view to show any changes (invalidate cache since file content changed)
-      treeProvider.refresh(true);
+      // Use targeted refresh - only updates this specific conversation in cache
+      // Much faster than reloading all 220+ conversations
+      await treeProvider.updateSingleConversation(uri.fsPath);
     }, DEBOUNCE_DELAY);
 
     debounceTimers.set(uri.fsPath, timer);

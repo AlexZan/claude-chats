@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] - 2025-01-28
+
+### Fixed
+
+- **CRITICAL: Rename functionality broken** ([src/fileOperations.ts:79-99](src/fileOperations.ts#L79-L99))
+  - `extractFastMetadataAsync()` was rejecting summaries whose `leafUuid` pointed beyond first 10 lines
+  - Renamed conversations have `leafUuid` pointing to last message (often line 50+)
+  - Now accepts any summary found in first 10 lines as title, regardless of `leafUuid` location
+  - Rename now works instantly with targeted cache refresh
+- **Targeted tree refresh for file saves** ([src/conversationTree.ts:254-319](src/conversationTree.ts#L254-L319))
+  - Added `updateSingleConversation()` method to update only changed conversation in cache
+  - File watcher now uses targeted refresh instead of full reload
+  - Fixed path normalization bug (Windows case-insensitive paths)
+  - Saves now update instantly without reloading 200+ conversations
+
 ## [0.4.6] - 2025-01-28
 
 ### 🚀 Lightning-Fast Performance - Now Faster Than Native Claude Code!

@@ -76,8 +76,10 @@ export class FileOperations {
         }
       }
 
-      // Extract title from first 50 lines
-      // Priority 1: Local summary (skip warmup-related)
+      // Extract title from first 10 lines
+      // Priority 1: First non-warmup summary found
+      // Note: We use the first summary we find, even if its leafUuid points beyond the first 10 lines
+      // This ensures renamed conversations work correctly (leafUuid might point to line 50+)
       for (const msg of messages) {
         if (FileOperations.isSummaryMessage(msg)) {
           const summary = msg.summary;
@@ -87,11 +89,10 @@ export class FileOperations {
             continue;
           }
 
-          // Only use summaries whose leafUuid points to a message in THIS file
-          if (msg.leafUuid && !messageUuids.has(msg.leafUuid)) {
-            continue;
-          }
-
+          // Use this summary as the title
+          // We don't check leafUuid here because:
+          // 1. The summary is in the first 10 lines, so it belongs to THIS conversation
+          // 2. The leafUuid might point to a message beyond line 10 (normal for longer conversations)
           title = summary;
           break;
         }
