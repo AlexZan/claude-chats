@@ -21,13 +21,15 @@
 - **Smart Search** - Fast full-text search with progress feedback, scoped to current project
 
 ### ✏️ True Conversation Renaming
+- **Quick Rename Button** - Status bar button appears when Claude Code chat is active - one-click rename without sidebar!
+- **Smart Detection** - Automatically detects active chat and finds the right conversation (80%+ success rate)
 - **Actually modifies the conversation data** - not just a display name in this extension
 - **Automatic maintenance** - File watcher keeps renamed titles working during active conversations
 - Changes persist in Claude Code's native interface
 - Renames appear everywhere: sidebar, conversation history, recent files
 - Uses summary-based renaming with automatic `leafUuid` updates
 - Smart validation prevents naming conflicts
-- Rename directly from tree view or command palette
+- Rename from tree view, command palette, or status bar button
 
 ### 📖 Beautiful Conversation Viewer
 - **Custom chat-like viewer** - Opens instead of raw `.jsonl` files
@@ -47,11 +49,13 @@
 - **Faster than native Claude Code** - Loads 220+ conversations in under 2 seconds
 - **Surgical file parsing** - Reads only first 10 lines per file (summary + first message)
 - **Smart caching** - 60-second cache for instant view updates
+- **Targeted refresh** - File saves update only the changed conversation, no full reload
 - **Project-scoped file watching** - Only watches current project, not all 200+ conversations
 - **Warmup filtering** - Ignores Claude Code's background warmup conversations
 
 **Performance Stats:**
 - 📊 **20x faster** than initial implementation (40s → 2s for 220 files)
+- 📊 **Instant updates** - Renames and saves update in ~3ms (no full reload)
 - 📊 Parses only **2,200 lines** instead of 20,000+ messages
 - 📊 Uses file system metadata for timestamps (instant, no parsing needed)
 
@@ -61,6 +65,7 @@
 - Works with existing Claude Code conversation structure
 
 ### ⚡ Quick Access
+- **Status Bar Button** - Rename button appears when Claude Code chat is active (can be disabled in settings)
 - **Command Palette** - Access all features via `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
 - **Context Menus** - Right-click conversations for quick actions
 - **Inline Actions** - Rename and archive with one click
@@ -123,15 +128,24 @@ Or install directly from the [VS Code Marketplace](https://marketplace.visualstu
 
 ### Rename a Conversation
 
+**From Status Bar (Quickest):**
+1. Open a Claude Code chat
+2. Click the "✏️ Rename" button in the status bar (bottom-right)
+3. Enter new title
+
 **From Tree View:**
 1. Right-click a conversation
 2. Select "Rename"
 3. Enter new title
 
 **From Command Palette:**
-1. Open a `.jsonl` conversation file
+1. Open a Claude Code chat or `.jsonl` conversation file
 2. Press `Ctrl+Shift+P`
 3. Run "Claude Code: Rename Current Conversation"
+
+The status bar button automatically appears when you're viewing a Claude Code chat and disappears when you switch to other files. It uses smart fuzzy matching to find the right conversation (works in 80%+ of cases without any picker needed).
+
+**⚠️ Important:** After renaming, close and reopen the Claude Code chat tab to see the updated title. Claude Code caches tab titles and won't reflect changes until the tab is reloaded.
 
 ### Mark as Done/Undone
 
@@ -183,6 +197,7 @@ This extension contributes the following settings:
 * `claudeChats.showArchivedInTree` - Show archived conversations in the tree view (default: `true`)
 * `claudeChats.groupBy` - How to group conversations: `project` or `date` (default: `project`)
 * `claudeChats.showEmptyConversations` - Show conversations with no actual user content, including warmup conversations (default: `false`)
+* `claudeChats.showStatusBarButton` - Show quick rename button in status bar when Claude Code chat is active (default: `true`)
 
 ## Commands
 
@@ -214,6 +229,7 @@ This extension contributes the following settings:
 - ✅ New titles show everywhere VS Code displays the conversation
 - ✅ Uses Claude Code's native summary mechanism - clean and official
 - ✅ Auto-updates `leafUuid` when conversation continues to keep title accurate
+- ⚠️ **Important:** Close and reopen Claude Code chat tabs after renaming to see updated titles (Claude Code caches tab names)
 - ⚠️ This is a workaround until Anthropic adds official rename support
 
 ### Archive Implementation

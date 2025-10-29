@@ -11,6 +11,20 @@ This is a VS Code extension that manages Claude Code conversations (.jsonl files
 - Custom viewer for conversation files
 - Lightning-fast performance (faster than native Claude Code)
 
+## Communication Guidelines
+
+**IMPORTANT**: When estimating effort or complexity:
+- **NEVER** provide estimates in human time (hours, days, weeks)
+- **ALWAYS** estimate in terms of token cost or complexity
+- Use qualitative descriptors: "low token cost", "moderate complexity", "high token usage"
+- If specific numbers are needed, estimate in tokens (e.g., "~5K-10K tokens")
+- Focus on technical complexity rather than time duration
+
+**Example:**
+- ❌ "This will take 2-3 hours"
+- ✅ "This is a low-complexity task, approximately 5K-8K tokens"
+- ✅ "This is moderately complex, expect ~15K-20K token usage"
+
 ## Publishing Workflow
 
 **IMPORTANT**: Never publish to the marketplace without explicit user approval.
@@ -42,6 +56,127 @@ npx @vscode/vsce publish
 - **Patch** (0.4.x): Bug fixes, small improvements
 - **Minor** (0.x.0): New features, non-breaking changes
 - **Major** (x.0.0): Breaking changes
+
+## Code Quality Standards
+
+### Code Reuse and Abstraction
+
+**IMPORTANT**: Before implementing any new functionality:
+
+1. **Search for existing systems** that solve similar problems
+   - Use Grep/Glob to search for similar functionality in the codebase
+   - Check if existing functions can be reused or extended
+   - Example: Don't create duplicate file parsing logic if `extractFastMetadataAsync()` exists
+
+2. **Evaluate abstraction opportunities**
+   - If code would be duplicated, consider creating a shared utility
+   - Only abstract when there are 2+ actual use cases (avoid premature abstraction)
+   - Shared logic should be placed in appropriate files:
+     - File operations → `src/fileOperations.ts`
+     - Path utilities → `src/utils.ts` (create if needed)
+     - Conversation logic → `src/conversationManager.ts`
+
+3. **Smart abstraction decisions**
+   - **DO abstract** when:
+     - Same logic appears 2+ times with minor variations
+     - Future features will likely need the same functionality
+     - Abstraction reduces complexity rather than hiding it
+   - **DON'T abstract** when:
+     - Only one use case exists currently
+     - Abstraction adds more complexity than it removes
+     - The "similar" code has different underlying semantics
+
+### Clean Code Principles
+
+All code must follow these principles:
+
+1. **Single Responsibility Principle**
+   - Each function does ONE thing well
+   - Functions should be 20-50 lines max (exceptions for complex logic with comments)
+   - Classes should have a single, well-defined purpose
+
+2. **Meaningful Names**
+   - Variables: descriptive nouns (`conversationCache`, not `data`)
+   - Functions: verb phrases (`extractFastMetadataAsync`, not `getMeta`)
+   - Booleans: questions (`isArchived`, `hasValidTitle`)
+   - Avoid abbreviations unless universally known (`msg` → `message`)
+
+3. **DRY (Don't Repeat Yourself)**
+   - Extract repeated logic into functions
+   - Use parameters to handle variations
+   - But prefer clarity over extreme DRYness
+
+4. **Error Handling**
+   - Always handle potential errors gracefully
+   - Provide meaningful error messages
+   - Log errors with context: `console.error('Failed to rename conversation', filePath, error)`
+
+5. **Comments**
+   - Explain WHY, not WHAT (code should be self-documenting)
+   - Document non-obvious performance optimizations
+   - Add TODO comments for known technical debt
+   - Example: `// Read only first 10 lines for performance - summaries are always at the top`
+
+6. **Function Structure**
+   - Early returns for error cases
+   - Guard clauses at the top
+   - Happy path should be the main body
+   ```typescript
+   // Good
+   function process(data: Data | null): Result {
+     if (!data) return null;
+     if (!data.isValid) return null;
+
+     // Main logic here
+     return result;
+   }
+   ```
+
+7. **Immutability**
+   - Prefer `const` over `let`
+   - Avoid mutating function parameters
+   - Use array methods that return new arrays (`.map()`, `.filter()`)
+
+8. **Type Safety**
+   - Use TypeScript types, avoid `any`
+   - Prefer interfaces for object shapes
+   - Use union types for known variations
+   - Define return types explicitly on functions
+
+**Example of applying these principles:**
+
+❌ **Bad:**
+```typescript
+function doStuff(d: any) {
+  let x = d.split('\n');
+  let y = x[0];
+  if (y.includes('summary')) {
+    let z = JSON.parse(y);
+    return z.content;
+  }
+  return null;
+}
+```
+
+✅ **Good:**
+```typescript
+function extractSummaryFromJsonl(fileContent: string): string | null {
+  const lines = fileContent.split('\n');
+  const firstLine = lines[0];
+
+  if (!firstLine?.includes('"type":"summary"')) {
+    return null;
+  }
+
+  try {
+    const message = JSON.parse(firstLine);
+    return message.content || null;
+  } catch (error) {
+    console.error('Failed to parse JSONL summary line', error);
+    return null;
+  }
+}
+```
 
 ## Critical Implementation Notes
 

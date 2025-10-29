@@ -2,7 +2,7 @@
   "name": "claude-chats",
   "displayName": "Claude Chats",
   "description": "Rename, organize, and archive Claude Code conversations",
-  "version": "0.4.7",
+  "version": "0.5.0",
   "publisher": "AlexZanfir",
   "author": {
     "name": "Alexander Zanfir"
@@ -122,10 +122,6 @@
         "command": "claudeCodeConversationManager.toggleWarmupFilter",
         "title": "Toggle Warmup-Only Conversations",
         "icon": "$(filter)"
-      },
-      {
-        "command": "claudeCodeConversationManager.debugTabInfo",
-        "title": "Claude Code: Debug Active Tab Info"
       }
     ],
     "viewsContainers": {
@@ -252,6 +248,11 @@
           "type": "boolean",
           "default": false,
           "description": "Show conversations that only contain warmup/sidechain messages (no actual user content)"
+        },
+        "claudeChats.showStatusBarButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show 'Rename' button in status bar when Claude Code chat is active"
         }
       }
     }

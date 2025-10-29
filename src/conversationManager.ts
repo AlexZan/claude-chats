@@ -259,4 +259,45 @@ export class ConversationManager {
 
     return allConversations.find(c => c.id === conversationId) || null;
   }
+
+  /**
+   * Find conversations by title (for fuzzy matching from tab labels)
+   * Handles truncated titles from Claude Code tabs
+   */
+  findConversationsByTitle(tabLabel: string): Conversation[] {
+    const allConversations = [
+      ...FileOperations.getAllConversations(),
+      ...FileOperations.getArchivedConversations()
+    ];
+
+    // Remove ellipsis if present (Claude truncates with "…")
+    const cleanLabel = tabLabel.replace(/…$/, '').trim();
+
+    if (!cleanLabel) {
+      return [];
+    }
+
+    // Try exact match first (when title fits in tab)
+    const exactMatch = allConversations.find(c => c.title === cleanLabel);
+    if (exactMatch) {
+      return [exactMatch];
+    }
+
+    // Try prefix match (for truncated titles like "i found a big problem, t…")
+    const prefixMatches = allConversations.filter(c =>
+      c.title.startsWith(cleanLabel)
+    );
+
+    if (prefixMatches.length > 0) {
+      return prefixMatches;
+    }
+
+    // Fallback: case-insensitive partial match
+    const lowerLabel = cleanLabel.toLowerCase();
+    const partialMatches = allConversations.filter(c =>
+      c.title.toLowerCase().includes(lowerLabel)
+    );
+
+    return partialMatches;
+  }
 }

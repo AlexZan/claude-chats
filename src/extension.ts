@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { ConversationTreeProvider, ConversationTreeItem } from './conversationTree';
 import { ConversationManager } from './conversationManager';
 import { ConversationViewer } from './conversationViewer';
-import { debugActiveTab, startTabMonitoring } from './debugTabInfo';
+import { getActiveClaudeCodeChatTab, getChatTitleFromTab } from './claudeCodeDetection';
+import { FileOperations } from './fileOperations';
 
 /**
  * Get formatted timestamp for logs
@@ -104,44 +105,105 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // Command: Rename current conversation (from command palette)
+  // Command: Rename current conversation (smart - works with Claude Code tabs and .jsonl files)
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'claudeCodeConversationManager.renameCurrentConversation',
       async () => {
+        let conversation = null;
+
+        // Try 1: Check if .jsonl file is open in text editor (existing behavior)
         const conversationId = manager.getCurrentConversationId();
-
-        if (!conversationId) {
-          vscode.window.showErrorMessage(
-            'No conversation file is currently open. Open a .jsonl file first.'
-          );
-          return;
+        if (conversationId) {
+          conversation = manager.findConversationById(conversationId);
         }
 
-        const conversation = manager.findConversationById(conversationId);
-
+        // Try 2: Check if Claude Code chat tab is active
         if (!conversation) {
-          vscode.window.showErrorMessage(
-            'Could not find conversation information for the current file.'
-          );
-          return;
-        }
+          const claudeTab = getActiveClaudeCodeChatTab();
+          if (claudeTab) {
+            const tabLabel = getChatTitleFromTab(claudeTab);
+            const matches = manager.findConversationsByTitle(tabLabel);
 
-        const newTitle = await vscode.window.showInputBox({
-          prompt: 'Enter new conversation title',
-          value: conversation.title,
-          validateInput: (value) => {
-            return value.trim() ? null : 'Title cannot be empty';
+            if (matches.length === 1) {
+              // Single match - high confidence
+              conversation = matches[0];
+            } else if (matches.length > 1) {
+              // Multiple matches - show picker to disambiguate
+              const items = matches.map(c => ({
+                label: c.title,
+                description: c.isArchived ? '📦 Archived' : '',
+                detail: `Last modified: ${c.lastModified.toLocaleString()}`,
+                conversation: c
+              }));
+
+              const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: `Multiple conversations match "${tabLabel}". Select one:`,
+                matchOnDescription: true
+              });
+
+              if (selected) {
+                conversation = selected.conversation;
+              } else {
+                return; // User cancelled
+              }
+            }
           }
-        });
-
-        if (!newTitle) {
-          return;
         }
 
-        await manager.rename(conversation, newTitle);
-        // Use targeted refresh instead of full reload
-        await treeProvider.updateSingleConversation(conversation.filePath);
+        // Try 3: No match found - show all conversations sorted by recent
+        if (!conversation) {
+          const allConversations = [
+            ...FileOperations.getAllConversations(),
+            ...FileOperations.getArchivedConversations()
+          ];
+
+          if (allConversations.length === 0) {
+            vscode.window.showErrorMessage('No conversations found.');
+            return;
+          }
+
+          // Sort by last modified (most recent first)
+          allConversations.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+
+          const items = allConversations.map(c => ({
+            label: c.title,
+            description: c.isArchived ? '📦 Archived' : '',
+            detail: `Last modified: ${c.lastModified.toLocaleString()}`,
+            conversation: c
+          }));
+
+          const selected = await vscode.window.showQuickPick(items, {
+            placeHolder: 'Select a conversation to rename',
+            matchOnDescription: true,
+            matchOnDetail: true
+          });
+
+          if (selected) {
+            conversation = selected.conversation;
+          } else {
+            return; // User cancelled
+          }
+        }
+
+        // Show rename dialog
+        if (conversation) {
+          const newTitle = await vscode.window.showInputBox({
+            prompt: 'Enter new conversation title',
+            value: conversation.title,
+            validateInput: (value) => {
+              return value.trim() ? null : 'Title cannot be empty';
+            }
+          });
+
+          if (!newTitle) {
+            return;
+          }
+
+          await manager.rename(conversation, newTitle);
+          // Use targeted refresh instead of full reload
+          await treeProvider.updateSingleConversation(conversation.filePath);
+        }
       }
     )
   );
@@ -249,16 +311,53 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // Command: Debug active tab info (temporary for research)
+  // Status bar button for quick rename (shows only when Claude Code chat is active)
+  const statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100
+  );
+  statusBarItem.command = 'claudeCodeConversationManager.renameCurrentConversation';
+  statusBarItem.text = '$(edit) Rename';
+  statusBarItem.tooltip = 'Rename current Claude Code conversation';
+
+  // Function to update status bar button visibility
+  function updateStatusBarVisibility() {
+    const config = vscode.workspace.getConfiguration('claudeChats');
+    const showButton = config.get<boolean>('showStatusBarButton', true);
+
+    if (!showButton) {
+      statusBarItem.hide();
+      return;
+    }
+
+    const claudeTab = getActiveClaudeCodeChatTab();
+    if (claudeTab) {
+      statusBarItem.show();
+    } else {
+      statusBarItem.hide();
+    }
+  }
+
+  // Update on tab changes
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'claudeCodeConversationManager.debugTabInfo',
-      debugActiveTab
-    )
+    vscode.window.tabGroups.onDidChangeTabs(() => {
+      updateStatusBarVisibility();
+    })
   );
 
-  // Optional: Start tab monitoring (uncomment to enable)
-  // startTabMonitoring(context);
+  // Update on configuration changes
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('claudeChats.showStatusBarButton')) {
+        updateStatusBarVisibility();
+      }
+    })
+  );
+
+  // Initial update
+  updateStatusBarVisibility();
+
+  context.subscriptions.push(statusBarItem);
 
   // Watch for Claude Code conversation file changes with intelligent auto-update
   // Only watch the current project directory to avoid unnecessary refreshes

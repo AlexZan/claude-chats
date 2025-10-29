@@ -382,11 +382,37 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   private async getActiveConversationItems(): Promise<vscode.TreeItem[]> {
-    const cacheKey = `active_${this.showWarmupOnly}`;
+    return this.getConversationItems(
+      'active',
+      this.conversationCache,
+      () => FileOperations.getAllConversationsAsync(true, true),
+      false // showEmptyPlaceholder
+    );
+  }
+
+  /**
+   * Generic method to get conversation items (reduces duplication)
+   * @param cachePrefix - Prefix for cache key ('active' or 'archived')
+   * @param cache - Cache to use (conversationCache or archivedConversationCache)
+   * @param fetchFn - Function to fetch conversations
+   * @param showEmptyPlaceholder - Whether to show "No X conversations" placeholder when empty
+   */
+  private async getConversationItems(
+    cachePrefix: string,
+    cache: Map<string, Conversation[]>,
+    fetchFn: () => Promise<Conversation[]>,
+    showEmptyPlaceholder: boolean
+  ): Promise<vscode.TreeItem[]> {
+    const cacheKey = `${cachePrefix}_${this.showWarmupOnly}`;
 
     // Check cache validity
-    if (this.isCacheValid() && this.conversationCache.has(cacheKey)) {
-      const cachedConversations = this.conversationCache.get(cacheKey)!;
+    if (this.isCacheValid() && cache.has(cacheKey)) {
+      const cachedConversations = cache.get(cacheKey)!;
+      if (showEmptyPlaceholder && cachedConversations.length === 0) {
+        const item = new vscode.TreeItem(`No ${cachePrefix} conversations`, vscode.TreeItemCollapsibleState.None);
+        item.contextValue = 'empty';
+        return [item];
+      }
       return this.buildTreeItemsFromConversations(cachedConversations);
     }
 
@@ -394,16 +420,25 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     const showEmpty = config.get<boolean>('showEmptyConversations', false);
 
     // Get all conversations asynchronously, then filter based on warmup filter
-    const allConversations = await FileOperations.getAllConversationsAsync(true, true);
+    const allConversations = await fetchFn();
+    console.log(`[${this.getTimestamp()}] [TreeProvider] ${cachePrefix}: Fetched ${allConversations.length} conversations`);
 
     // Filter out warmup-only conversations unless user wants to see them
     const conversations = this.showWarmupOnly
       ? allConversations
       : allConversations.filter(conv => showEmpty || conv.hasRealMessages);
+    console.log(`[${this.getTimestamp()}] [TreeProvider] ${cachePrefix}: After filtering ${conversations.length} conversations (showWarmupOnly=${this.showWarmupOnly}, showEmpty=${showEmpty})`);
 
     // Cache the conversations
-    this.conversationCache.set(cacheKey, conversations);
+    cache.set(cacheKey, conversations);
     this.cacheTimestamp = Date.now();
+
+    if (showEmptyPlaceholder && conversations.length === 0) {
+      console.log(`[${this.getTimestamp()}] [TreeProvider] ${cachePrefix}: Showing empty placeholder`);
+      const item = new vscode.TreeItem(`No ${cachePrefix} conversations`, vscode.TreeItemCollapsibleState.None);
+      item.contextValue = 'empty';
+      return [item];
+    }
 
     return this.buildTreeItemsFromConversations(conversations);
   }
@@ -472,41 +507,12 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   private async getArchivedConversationItems(): Promise<vscode.TreeItem[]> {
-    const cacheKey = `archived_${this.showWarmupOnly}`;
-
-    // Check cache validity
-    if (this.isCacheValid() && this.archivedConversationCache.has(cacheKey)) {
-      const cachedConversations = this.archivedConversationCache.get(cacheKey)!;
-      if (cachedConversations.length === 0) {
-        const item = new vscode.TreeItem('No archived conversations', vscode.TreeItemCollapsibleState.None);
-        item.contextValue = 'empty';
-        return [item];
-      }
-      return this.buildTreeItemsFromConversations(cachedConversations);
-    }
-
-    const config = vscode.workspace.getConfiguration('claudeCodeConversationManager');
-    const showEmpty = config.get<boolean>('showEmptyConversations', false);
-
-    // Get all conversations asynchronously, then filter based on warmup filter
-    const allConversations = await FileOperations.getArchivedConversationsAsync(true, true);
-
-    // Filter out warmup-only conversations unless user wants to see them
-    const conversations = this.showWarmupOnly
-      ? allConversations
-      : allConversations.filter(conv => showEmpty || conv.hasRealMessages);
-
-    // Cache the conversations
-    this.archivedConversationCache.set(cacheKey, conversations);
-    this.cacheTimestamp = Date.now();
-
-    if (conversations.length === 0) {
-      const item = new vscode.TreeItem('No archived conversations', vscode.TreeItemCollapsibleState.None);
-      item.contextValue = 'empty';
-      return [item];
-    }
-
-    return this.buildTreeItemsFromConversations(conversations);
+    return this.getConversationItems(
+      'archived',
+      this.archivedConversationCache,
+      () => FileOperations.getArchivedConversationsAsync(true, true),
+      true // showEmptyPlaceholder
+    );
   }
 
   private groupConversationsByProject(conversations: Conversation[]): Map<string, Conversation[]> {
