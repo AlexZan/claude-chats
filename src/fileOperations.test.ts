@@ -156,6 +156,18 @@ describe('FileOperations - Parsing Methods', () => {
 });
 
 describe('FileOperations - Message Validation', () => {
+  beforeEach(() => {
+    // Create test directory
+    if (!fs.existsSync(TEST_DIR)) {
+      fs.mkdirSync(TEST_DIR, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    // Clean up test files
+    cleanupTestFiles();
+  });
+
   describe('checkHasRealMessagesInParsed', () => {
     it('should detect real user messages', () => {
       const messages: ConversationLine[] = [
