@@ -18,6 +18,52 @@ export class FileOperations {
   private static crossFileSummaryCache = new Map<string, Map<string, { summary: string; leafUuid: string }>>();
 
   /**
+   * Centralized filtering patterns and utilities
+   * Single source of truth for message filtering logic
+   */
+  private static readonly WARMUP_PATTERN = /warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i;
+  private static readonly SYSTEM_METADATA_PATTERN = /^<(ide_|system-|user-|command-)/;
+
+  /**
+   * Check if a summary is a warmup/initialization summary that should be filtered out
+   */
+  private static isWarmupSummary(summary: string): boolean {
+    return this.WARMUP_PATTERN.test(summary);
+  }
+
+  /**
+   * Check if text content is system metadata that should be filtered from user-visible text
+   */
+  private static isSystemMetadata(text: string): boolean {
+    return this.SYSTEM_METADATA_PATTERN.test(text.trim());
+  }
+
+  /**
+   * Check if a message is a sidechain message (warmup/initialization)
+   */
+  private static isSidechainMessage(message: ConversationMessage): boolean {
+    return message.isSidechain === true;
+  }
+
+  /**
+   * Extract user-visible text from message content, filtering out system metadata
+   * Handles both string and array content formats
+   */
+  private static extractUserVisibleText(content: string | Array<{ type: string; text?: string }>): string {
+    if (typeof content === 'string') {
+      // String content - return if not system metadata
+      return this.isSystemMetadata(content) ? '' : content;
+    } else if (Array.isArray(content)) {
+      // Array content - filter and concatenate non-metadata text items
+      return content
+        .filter(item => item.type === 'text' && item.text && !this.isSystemMetadata(item.text))
+        .map(item => item.text)
+        .join(' ');
+    }
+    return '';
+  }
+
+  /**
    * Get formatted timestamp for logs
    */
   private static getTimestamp(): string {
@@ -91,7 +137,7 @@ export class FileOperations {
           const summary = msg.summary;
 
           // Skip warmup summaries
-          if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+          if (FileOperations.isWarmupSummary(summary)) {
             continue;
           }
 
@@ -182,7 +228,7 @@ export class FileOperations {
           const summary = msg.summary;
 
           // Skip warmup summaries
-          if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+          if (FileOperations.isWarmupSummary(summary)) {
             continue;
           }
 
@@ -302,7 +348,7 @@ export class FileOperations {
         const leafUuid = message.leafUuid;
 
         // Skip warmup/initialization summaries
-        if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+        if (FileOperations.isWarmupSummary(summary)) {
           continue;
         }
 
@@ -453,34 +499,8 @@ export class FileOperations {
       return '';
     }
 
-    const { content } = message.message;
-
-    if (typeof content === 'string') {
-      const text = content.trim();
-      // Return empty if it's a system message
-      if (/^<(ide_|system-|user-|command-)/.test(text)) {
-        return '';
-      }
-      return text;
-    }
-
-    if (Array.isArray(content)) {
-      // For multi-part messages, find the first non-system text
-      for (const item of content) {
-        if (item.type === 'text' && item.text) {
-          const text = item.text.trim();
-          // Skip system metadata - look for actual user text
-          if (!/^<(ide_|system-|user-|command-)/.test(text)) {
-            return text;
-          }
-        }
-      }
-
-      // If all parts are system messages, return empty
-      return '';
-    }
-
-    return '';
+    // Use centralized extraction utility
+    return FileOperations.extractUserVisibleText(message.message.content);
   }
 
   /**
@@ -516,33 +536,10 @@ export class FileOperations {
         continue;
       }
 
-      // Check if there's any real user content (not just system metadata)
-      let hasRealContent = false;
+      // Extract user-visible text (filters out system metadata)
+      const userVisibleText = FileOperations.extractUserVisibleText(content);
 
-      if (typeof content === 'string') {
-        // String content - check if it's not a system metadata message
-        if (!/^<(ide_|system-|user-|command-)/.test(content.trim())) {
-          hasRealContent = true;
-        }
-      } else if (Array.isArray(content)) {
-        // Array content - check each text item individually
-        for (const item of content) {
-          if (item.type === 'text' && item.text) {
-            const text = item.text.trim();
-            // Skip system metadata items
-            if (/^<(ide_|system-|user-|command-)/.test(text)) {
-              continue;
-            }
-            // Found a real text item that's not system metadata
-            if (text.length > 0) {
-              hasRealContent = true;
-              break;
-            }
-          }
-        }
-      }
-
-      if (hasRealContent) {
+      if (userVisibleText.length > 0) {
         // Found a real (non-sidechain) message with actual user content
         return true;
       }
@@ -708,7 +705,7 @@ export class FileOperations {
 
               if (leafUuid && summary) {
                 // Skip warmup/initialization summaries
-                if (!/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+                if (!FileOperations.isWarmupSummary(summary)) {
                   // Map leafUuid -> { summary, leafUuid }
                   // If multiple summaries reference same leafUuid, use first non-warmup one
                   if (!index.has(leafUuid)) {
@@ -792,7 +789,7 @@ export class FileOperations {
           const leafUuid = message.leafUuid;
 
           // Skip warmup/initialization summaries - Claude Code filters these
-          if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+          if (FileOperations.isWarmupSummary(summary)) {
             continue;
           }
 
