@@ -5,6 +5,7 @@ import { ConversationViewer } from './conversationViewer';
 import { getActiveClaudeCodeChatTab, getChatTitleFromTab } from './claudeCodeDetection';
 import { FileOperations } from './fileOperations';
 import { log } from './utils/logUtils';
+import { messageCache } from './utils/messageCache';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Claude Code Conversation Manager activated');
@@ -568,6 +569,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       log('FileWatcher', `Conversation modified: ${uri.fsPath}`);
+
+      // Invalidate message cache for this file (it was modified)
+      messageCache.invalidate(uri.fsPath);
 
       // Check for stale leafUuid and auto-update
       const wasUpdated = FileOperations.autoUpdateStaleLeafUuid(uri.fsPath);

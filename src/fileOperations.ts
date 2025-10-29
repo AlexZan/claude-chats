@@ -4,6 +4,7 @@ import * as os from 'os';
 import { ConversationMessage, Conversation, ConversationLine, SummaryMessage } from './types';
 import { MessageContentExtractor } from './utils/messageContentExtractor';
 import { log, logError } from './utils/logUtils';
+import { messageCache } from './utils/messageCache';
 
 /**
  * Helper class for safe file operations on conversation files
@@ -263,8 +264,33 @@ export class FileOperations {
 
   /**
    * Parse a .jsonl conversation file (synchronous)
+   * Uses message cache to avoid re-parsing during search operations
    */
-  static parseConversation(filePath: string): ConversationLine[] {
+  static parseConversation(filePath: string, useCache: boolean = true): ConversationLine[] {
+    // Check cache first if enabled
+    if (useCache) {
+      try {
+        const stats = fs.statSync(filePath);
+        const mtime = stats.mtimeMs;
+        const cached = messageCache.get(filePath, mtime);
+
+        if (cached) {
+          return cached;
+        }
+
+        // Cache miss - parse and store
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const messages = FileOperations.parseJSONLContent(content, filePath);
+        messageCache.set(filePath, messages, mtime);
+
+        return messages;
+      } catch (error) {
+        // If cache check fails, fall through to normal parsing
+        logError('FileOps', 'Cache check failed, falling back to direct parsing', error);
+      }
+    }
+
+    // Direct parsing without cache
     const content = fs.readFileSync(filePath, 'utf-8');
     return FileOperations.parseJSONLContent(content, filePath);
   }
@@ -1033,6 +1059,9 @@ export class FileOperations {
         // Write back to the other file
         fs.writeFileSync(otherFilePath, lines.join('\n'), 'utf-8');
 
+        // Invalidate message cache for the other file (it was modified)
+        messageCache.invalidate(otherFilePath);
+
       } catch (error) {
         // Silent - skip files that can't be processed
         continue;
@@ -1095,6 +1124,9 @@ export class FileOperations {
 
     // Write back to file
     fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+
+    // Invalidate message cache for this file (it was modified)
+    messageCache.invalidate(filePath);
 
     // Now update any cross-file summaries that point to this conversation
     this.updateCrossFileSummaries(filePath, newTitle);
@@ -1510,6 +1542,9 @@ export class FileOperations {
     const fileName = path.basename(filePath);
     const archivePath = path.join(archiveProjectDir, fileName);
     fs.renameSync(filePath, archivePath);
+
+    // Invalidate cache for old path (file moved)
+    messageCache.invalidate(filePath);
   }
 
   /**
@@ -1526,6 +1561,9 @@ export class FileOperations {
     const restorePath = path.join(projectDir, fileName);
 
     fs.renameSync(filePath, restorePath);
+
+    // Invalidate cache for old path (file moved)
+    messageCache.invalidate(filePath);
   }
 
   /**
@@ -1538,6 +1576,9 @@ export class FileOperations {
     }
 
     fs.unlinkSync(filePath);
+
+    // Invalidate cache for deleted file
+    messageCache.invalidate(filePath);
   }
 
   /**

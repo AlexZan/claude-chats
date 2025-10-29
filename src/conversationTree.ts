@@ -5,6 +5,7 @@ import { FileOperations } from './fileOperations';
 import { log, logError } from './utils/logUtils';
 import { normalizePath } from './utils/pathUtils';
 import { groupByTimePeriod, getTimePeriods, TimePeriod } from './utils/dateUtils';
+import { messageCache } from './utils/messageCache';
 
 /**
  * Tree item representing a time group (Today, Yesterday, etc.)
@@ -241,6 +242,9 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
     this.conversationCache.clear();
     this.archivedConversationCache.clear();
     this.cacheTimestamp = 0;
+
+    // Also clear message cache when invalidating conversation cache
+    messageCache.clear();
   }
 
   /**
