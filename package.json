@@ -2,7 +2,7 @@
   "name": "claude-chats",
   "displayName": "Claude Chats",
   "description": "Rename, organize, and archive Claude Code conversations",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "AlexZanfir",
   "author": {
     "name": "Alexander Zanfir"
@@ -122,6 +122,11 @@
         "command": "claudeCodeConversationManager.toggleWarmupFilter",
         "title": "Toggle Warmup-Only Conversations",
         "icon": "$(filter)"
+      },
+      {
+        "command": "claudeCodeConversationManager.showClaudeChatsMenu",
+        "title": "Claude Chats",
+        "icon": "$(comment-discussion)"
       }
     ],
     "viewsContainers": {
@@ -209,6 +214,12 @@
           "command": "claudeCodeConversationManager.exportToMarkdown",
           "when": "view == claudeCodeConversationTree && viewItem == archivedConversation",
           "group": "1_actions@2"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "claudeCodeConversationManager.showClaudeChatsMenu",
+          "group": "claudeChats@1"
         }
       ]
     },

@@ -68,9 +68,10 @@
 
 ### ⚡ Quick Access
 - **Claude Chats Menu Button** - Full action menu appears when Claude Code chat is active (can be disabled in settings)
+- **Right-Click on Tab** - Access Claude Chats menu from any editor tab context menu
 - **5 Quick Actions** - Rename, mark done, archive, export, or delete from one menu
 - **Command Palette** - Access all features via `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
-- **Context Menus** - Right-click conversations for quick actions
+- **Context Menus** - Right-click conversations in tree view for quick actions
 - **Inline Actions** - Rename and archive with one click
 
 ## In Action
@@ -131,17 +132,24 @@ Or install directly from the [VS Code Marketplace](https://marketplace.visualstu
 
 ### Quick Actions Menu
 
-**From Status Bar (Quickest):**
+**From Status Bar:**
 1. Open a Claude Code chat
 2. Click the "💬 Claude Chats" button in the status bar (bottom-right)
-3. Select an action from the menu:
-   - ✏️ **Rename** - Change conversation title
-   - ✓ **Mark as Done/Undone** - Toggle completion status
-   - 📦 **Archive/Restore** - Move to/from archive
-   - 📋 **Export to Markdown** - Save as .md file
-   - 🗑️ **Delete** - Permanently remove
+3. Select an action from the menu
 
-The menu button automatically appears when you're viewing a Claude Code chat and disappears when you switch to other files. It uses smart fuzzy matching to find the right conversation (works in 80%+ of cases without any picker needed). Menu items are state-aware - showing "Archive" or "Restore", "Done" or "Undone" based on current state.
+**From Tab Context Menu (New!):**
+1. Right-click on any editor tab (Claude Code chat or .jsonl file)
+2. Select "Claude Chats" from context menu
+3. Choose your action
+
+**Available Actions:**
+- ✏️ **Rename** - Change conversation title
+- ✓ **Mark as Done/Undone** - Toggle completion status
+- 📦 **Archive/Restore** - Move to/from archive
+- 📋 **Export to Markdown** - Save as .md file
+- 🗑️ **Delete** - Permanently remove
+
+The menu uses smart fuzzy matching to find the right conversation (works in 80%+ of cases without any picker needed). Menu items are state-aware - showing "Archive" or "Restore", "Done" or "Undone" based on current state.
 
 **⚠️ Important:** After renaming, close and reopen the Claude Code chat tab to see the updated title. Claude Code caches tab titles and won't reflect changes until the tab is reloaded.
 
