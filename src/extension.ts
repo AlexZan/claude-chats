@@ -573,12 +573,12 @@ export function activate(context: vscode.ExtensionContext) {
       // Invalidate message cache for this file (it was modified)
       messageCache.invalidate(uri.fsPath);
 
-      // Check for stale leafUuid and auto-update
+      // Check for stale leafUuid and auto-update (silent - no notification needed)
       const wasUpdated = FileOperations.autoUpdateStaleLeafUuid(uri.fsPath);
 
       if (wasUpdated) {
         log('FileWatcher', `Auto-updated stale leafUuid for: ${uri.fsPath}`);
-        vscode.window.showInformationMessage('Conversation title updated automatically');
+        // No notification - leafUuid update is internal maintenance, title didn't change
 
         // Invalidate cross-file cache since leafUuid might have changed
         const path = require('path');
