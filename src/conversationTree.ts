@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { Conversation } from './types';
 import { FileOperations } from './fileOperations';
+import { log, logError } from './utils/logUtils';
+import { normalizePath } from './utils/pathUtils';
+import { groupByTimePeriod, getTimePeriods, TimePeriod } from './utils/dateUtils';
 
 /**
  * Tree item representing a time group (Today, Yesterday, etc.)
@@ -147,13 +150,6 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> =
     new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
 
-  /**
-   * Get formatted timestamp for logs
-   */
-  private getTimestamp(): string {
-    const now = new Date();
-    return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
-  }
 
   readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> =
     this._onDidChangeTreeData.event;
@@ -190,7 +186,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
    * Mark the tree as loading (prevents file watcher refreshes during initial load)
    */
   setLoading(isLoading: boolean): void {
-    console.log(`[${this.getTimestamp()}] [TreeProvider] setLoading: ${isLoading}`);
+    log('TreeProvider', `setLoading: ${isLoading}`);
     this.isLoading = isLoading;
 
     // Record when load completed
@@ -200,7 +196,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
 
     // If we were loading and now finished, check if a refresh was pending
     if (!isLoading && this.pendingRefresh) {
-      console.log(`[${this.getTimestamp()}] [TreeProvider] Pending refresh triggered after load completed`);
+      log('TreeProvider', 'Pending refresh triggered after load completed');
       this.pendingRefresh = false;
       this.refresh();
     }
@@ -227,7 +223,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   refresh(invalidateCache: boolean = true): void {
     // If we're currently loading, queue the refresh for after load completes
     if (this.isLoading) {
-      console.log(`[${this.getTimestamp()}] [TreeProvider] Refresh requested during load, queuing for later`);
+      log('TreeProvider', 'Refresh requested during load, queuing for later');
       this.pendingRefresh = true;
       return;
     }
@@ -280,9 +276,9 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
         const archiveCacheKey = `archived_${this.showWarmupOnly}`;
         const archivedCache = this.archivedConversationCache.get(archiveCacheKey);
         if (archivedCache) {
-          // Normalize paths for comparison (Windows path separators and casing)
-          const normalizedFilePath = filePath.toLowerCase().replace(/\\/g, '/');
-          const index = archivedCache.findIndex(c => c.filePath.toLowerCase().replace(/\\/g, '/') === normalizedFilePath);
+          // Use centralized path normalization
+          const normalizedFilePath = normalizePath(filePath);
+          const index = archivedCache.findIndex(c => normalizePath(c.filePath) === normalizedFilePath);
           if (index !== -1) {
             archivedCache[index] = updatedConversation;
             cacheUpdated = true;
@@ -292,9 +288,9 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
         const activeCacheKey = `active_${this.showWarmupOnly}`;
         const activeCache = this.conversationCache.get(activeCacheKey);
         if (activeCache) {
-          // Normalize paths for comparison (Windows path separators and casing)
-          const normalizedFilePath = filePath.toLowerCase().replace(/\\/g, '/');
-          const index = activeCache.findIndex(c => c.filePath.toLowerCase().replace(/\\/g, '/') === normalizedFilePath);
+          // Use centralized path normalization
+          const normalizedFilePath = normalizePath(filePath);
+          const index = activeCache.findIndex(c => normalizePath(c.filePath) === normalizedFilePath);
           if (index !== -1) {
             activeCache[index] = updatedConversation;
             cacheUpdated = true;
@@ -311,7 +307,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
         this._onDidChangeTreeData.fire();
       }
     } catch (error) {
-      console.error(`[${this.getTimestamp()}] [TreeProvider] Failed to update single conversation ${filePath}:`, error);
+      logError('TreeProvider', `Failed to update single conversation ${filePath}:`, error);
       // Fall back to full refresh on error
       this.invalidateCache();
       this._onDidChangeTreeData.fire();
@@ -421,20 +417,20 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
 
     // Get all conversations asynchronously, then filter based on warmup filter
     const allConversations = await fetchFn();
-    console.log(`[${this.getTimestamp()}] [TreeProvider] ${cachePrefix}: Fetched ${allConversations.length} conversations`);
+    log('TreeProvider', `${cachePrefix}: Fetched ${allConversations.length} conversations`);
 
     // Filter out warmup-only conversations unless user wants to see them
     const conversations = this.showWarmupOnly
       ? allConversations
       : allConversations.filter(conv => showEmpty || conv.hasRealMessages);
-    console.log(`[${this.getTimestamp()}] [TreeProvider] ${cachePrefix}: After filtering ${conversations.length} conversations (showWarmupOnly=${this.showWarmupOnly}, showEmpty=${showEmpty})`);
+    log('TreeProvider', `${cachePrefix}: After filtering ${conversations.length} conversations (showWarmupOnly=${this.showWarmupOnly}, showEmpty=${showEmpty})`);
 
     // Cache the conversations
     cache.set(cacheKey, conversations);
     this.cacheTimestamp = Date.now();
 
     if (showEmptyPlaceholder && conversations.length === 0) {
-      console.log(`[${this.getTimestamp()}] [TreeProvider] ${cachePrefix}: Showing empty placeholder`);
+      log('TreeProvider', `${cachePrefix}: Showing empty placeholder`);
       const item = new vscode.TreeItem(`No ${cachePrefix} conversations`, vscode.TreeItemCollapsibleState.None);
       item.contextValue = 'empty';
       return [item];
@@ -473,37 +469,8 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
   }
 
   private groupByTimePeriod(conversations: Conversation[]): Map<string, Conversation[]> {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
-    const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const monthStart = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    const groups = new Map<string, Conversation[]>([
-      ['Today', []],
-      ['Yesterday', []],
-      ['Past week', []],
-      ['Past month', []],
-      ['Older', []]
-    ]);
-
-    for (const conv of conversations) {
-      const time = conv.lastMessageTime;
-
-      if (time >= todayStart) {
-        groups.get('Today')!.push(conv);
-      } else if (time >= yesterdayStart) {
-        groups.get('Yesterday')!.push(conv);
-      } else if (time >= weekStart) {
-        groups.get('Past week')!.push(conv);
-      } else if (time >= monthStart) {
-        groups.get('Past month')!.push(conv);
-      } else {
-        groups.get('Older')!.push(conv);
-      }
-    }
-
-    return groups;
+    // Use centralized date utility for time period grouping
+    return groupByTimePeriod(conversations);
   }
 
   private async getArchivedConversationItems(): Promise<vscode.TreeItem[]> {

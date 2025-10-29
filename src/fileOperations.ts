@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { ConversationMessage, Conversation, ConversationLine, SummaryMessage } from './types';
 import { MessageContentExtractor } from './utils/messageContentExtractor';
+import { log, logError } from './utils/logUtils';
 
 /**
  * Helper class for safe file operations on conversation files
@@ -59,13 +60,6 @@ export class FileOperations {
     });
   }
 
-  /**
-   * Get formatted timestamp for logs
-   */
-  private static getTimestamp(): string {
-    const now = new Date();
-    return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
-  }
 
   /**
    * Fast metadata extraction for tree view - reads only minimal lines
@@ -717,9 +711,9 @@ export class FileOperations {
         }
       }
 
-      console.log(`[${this.getTimestamp()}] [FileOps] Built cross-file summary index for ${projectDir}: ${index.size} summaries`);
+      log('FileOps', `Built cross-file summary index for ${projectDir}: ${index.size} summaries`);
     } catch (error) {
-      console.error(`[${this.getTimestamp()}] [FileOps] Error building cross-file index:`, error);
+      logError('FileOps', 'Error building cross-file index:', error);
     }
 
     return index;
@@ -731,7 +725,7 @@ export class FileOperations {
    */
   static invalidateCrossFileSummaryCache(projectDir: string): void {
     if (this.crossFileSummaryCache.has(projectDir)) {
-      console.log(`[${this.getTimestamp()}] [FileOps] Invalidating cross-file cache for ${projectDir}`);
+      log('FileOps', `Invalidating cross-file cache for ${projectDir}`);
       this.crossFileSummaryCache.delete(projectDir);
     }
   }
@@ -740,7 +734,7 @@ export class FileOperations {
    * Clear all cross-file summary caches
    */
   static clearCrossFileSummaryCache(): void {
-    console.log(`[${this.getTimestamp()}] [FileOps] Clearing all cross-file caches`);
+    log('FileOps', 'Clearing all cross-file caches');
     this.crossFileSummaryCache.clear();
   }
 
@@ -1329,7 +1323,7 @@ export class FileOperations {
         const jsonlFiles = files.filter(file => file.endsWith('.jsonl') && !file.endsWith('.backup'));
 
         if (jsonlFiles.length > 0) {
-          console.log(`[${FileOperations.getTimestamp()}] [FileOps] Processing ${jsonlFiles.length} conversation files in parallel...`);
+          log('FileOps', `Processing ${jsonlFiles.length} conversation files in parallel...`);
         }
 
         // Process all files in parallel using Promise.all
@@ -1375,10 +1369,10 @@ export class FileOperations {
         conversations.push(...validConversations);
       }
 
-      console.log(`[${FileOperations.getTimestamp()}] [FileOps] getAllConversationsAsync finished with ${conversations.length} conversations`);
+      log('FileOps', `getAllConversationsAsync finished with ${conversations.length} conversations`);
       return conversations;
     } catch (error) {
-      console.error('[FileOps] Error in getAllConversationsAsync:', error);
+      logError('FileOps', 'Error in getAllConversationsAsync:', error);
       return [];
     }
   }

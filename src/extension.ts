@@ -4,14 +4,7 @@ import { ConversationManager } from './conversationManager';
 import { ConversationViewer } from './conversationViewer';
 import { getActiveClaudeCodeChatTab, getChatTitleFromTab } from './claudeCodeDetection';
 import { FileOperations } from './fileOperations';
-
-/**
- * Get formatted timestamp for logs
- */
-function getTimestamp(): string {
-  const now = new Date();
-  return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
-}
+import { log } from './utils/logUtils';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Claude Code Conversation Manager activated');
@@ -478,7 +471,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Skip refresh if tree is currently loading - avoid interrupting the initial load
     if (treeProvider.isCurrentlyLoading()) {
-      console.log(`[${getTimestamp()}] [FileWatcher] Ignoring file creation during load: ${uri.fsPath}`);
+      log('FileWatcher', `Ignoring file creation during load: ${uri.fsPath}`);
       return;
     }
 
@@ -497,11 +490,11 @@ export function activate(context: vscode.ExtensionContext) {
       const hasRealMessages = await FileOperations.hasRealMessagesAsync(uri.fsPath);
 
       if (!hasRealMessages) {
-        console.log(`[${getTimestamp()}] [FileWatcher] Ignoring warmup-only conversation: ${uri.fsPath}`);
+        log('FileWatcher', `Ignoring warmup-only conversation: ${uri.fsPath}`);
         return;
       }
 
-      console.log(`[${getTimestamp()}] [FileWatcher] New conversation detected: ${uri.fsPath}`);
+      log('FileWatcher', `New conversation detected: ${uri.fsPath}`);
 
       // Invalidate cross-file summary cache for this project
       const path = require('path');
@@ -519,11 +512,11 @@ export function activate(context: vscode.ExtensionContext) {
   watcher.onDidDelete((uri) => {
     // Skip refresh if tree is currently loading
     if (treeProvider.isCurrentlyLoading()) {
-      console.log(`[${getTimestamp()}] [FileWatcher] Ignoring file deletion during load: ${uri.fsPath}`);
+      log('FileWatcher', `Ignoring file deletion during load: ${uri.fsPath}`);
       return;
     }
 
-    console.log(`[${getTimestamp()}] [FileWatcher] Conversation deleted: ${uri.fsPath}`);
+    log('FileWatcher', `Conversation deleted: ${uri.fsPath}`);
 
     // Clear any pending debounce for this file
     const existingTimer = debounceTimers.get(uri.fsPath);
@@ -551,7 +544,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Skip refresh if tree is currently loading
     if (treeProvider.isCurrentlyLoading()) {
-      console.log(`[${getTimestamp()}] [FileWatcher] Ignoring file change during load: ${uri.fsPath}`);
+      log('FileWatcher', `Ignoring file change during load: ${uri.fsPath}`);
       return;
     }
 
@@ -570,17 +563,17 @@ export function activate(context: vscode.ExtensionContext) {
       const hasRealMessages = await FileOperations.hasRealMessagesAsync(uri.fsPath);
 
       if (!hasRealMessages) {
-        console.log(`[${getTimestamp()}] [FileWatcher] Ignoring warmup-only conversation update: ${uri.fsPath}`);
+        log('FileWatcher', `Ignoring warmup-only conversation update: ${uri.fsPath}`);
         return;
       }
 
-      console.log(`[${getTimestamp()}] [FileWatcher] Conversation modified: ${uri.fsPath}`);
+      log('FileWatcher', `Conversation modified: ${uri.fsPath}`);
 
       // Check for stale leafUuid and auto-update
       const wasUpdated = FileOperations.autoUpdateStaleLeafUuid(uri.fsPath);
 
       if (wasUpdated) {
-        console.log(`[${getTimestamp()}] [FileWatcher] Auto-updated stale leafUuid for: ${uri.fsPath}`);
+        log('FileWatcher', `Auto-updated stale leafUuid for: ${uri.fsPath}`);
         vscode.window.showInformationMessage('Conversation title updated automatically');
 
         // Invalidate cross-file cache since leafUuid might have changed
@@ -611,7 +604,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Re-register all event handlers on the new watcher
       // Note: This is simplified - in production you'd want to refactor the handlers into reusable functions
-      console.log(`[${getTimestamp()}] [FileWatcher] Workspace changed, now watching: ${newProjectPath}`);
+      log('FileWatcher', `Workspace changed, now watching: ${newProjectPath}`);
 
       // Refresh tree to show new project's conversations
       treeProvider.refresh(true);
