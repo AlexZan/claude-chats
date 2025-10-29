@@ -122,6 +122,94 @@ export class FileOperations {
   }
 
   /**
+   * Extract fast metadata from conversation file (synchronous version)
+   * Reads only first 10 lines for performance
+   * Used by synchronous getAllConversations() and getArchivedConversations()
+   */
+  static extractFastMetadata(filePath: string): {
+    title: string;
+    hasRealMessages: boolean;
+    isHidden: boolean;
+  } {
+    try {
+      // Read first 10 lines only - summary is line 1, first real message usually line 4-5
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n').filter(line => line.trim()).slice(0, 10);
+
+      let title = 'Untitled';
+      let hasRealMessages = false;
+      let isHidden = false;
+      const messageUuids = new Set<string>();
+
+      // Parse only the first 10 lines
+      const messages: ConversationLine[] = [];
+      for (const line of lines) {
+        try {
+          const msg = JSON.parse(line) as ConversationLine;
+          messages.push(msg);
+
+          // Collect message UUIDs for hidden check
+          if ('uuid' in msg && msg.uuid) {
+            messageUuids.add(msg.uuid);
+          }
+        } catch (e) {
+          // Skip malformed lines
+        }
+      }
+
+      // Check for hasRealMessages (first non-sidechain user message)
+      for (const msg of messages) {
+        if (FileOperations.isConversationMessage(msg) && !msg.isSidechain) {
+          hasRealMessages = true;
+          break;
+        }
+      }
+
+      // Check for isHidden (summary with external leafUuid)
+      for (const msg of messages) {
+        if (FileOperations.isSummaryMessage(msg) && msg.leafUuid) {
+          if (!messageUuids.has(msg.leafUuid)) {
+            isHidden = true;
+            break;
+          }
+        }
+      }
+
+      // Extract title from first 10 lines
+      // Priority 1: First non-warmup summary found
+      for (const msg of messages) {
+        if (FileOperations.isSummaryMessage(msg)) {
+          const summary = msg.summary;
+
+          // Skip warmup summaries
+          if (/warmup|readiness|initialization|ready|assistant ready|codebase|exploration|introduction|search|repository/i.test(summary)) {
+            continue;
+          }
+
+          // Use this summary as the title
+          title = summary;
+          break;
+        }
+      }
+
+      // Priority 2: First user message
+      if (title === 'Untitled') {
+        const firstUserMsg = FileOperations.getFirstUserMessage(messages);
+        if (firstUserMsg) {
+          const text = FileOperations.extractText(firstUserMsg);
+          if (text) {
+            title = text.split('\n')[0].substring(0, 100);
+          }
+        }
+      }
+
+      return { title, hasRealMessages, isHidden };
+    } catch (error) {
+      return { title: 'Untitled', hasRealMessages: false, isHidden: false };
+    }
+  }
+
+  /**
    * Parse a .jsonl conversation file
    */
   static parseConversation(filePath: string): ConversationLine[] {
@@ -1190,6 +1278,51 @@ export class FileOperations {
   }
 
   /**
+   * Build a Conversation object from file metadata
+   * Shared logic used by both sync and async getAllConversations methods
+   *
+   * @param file - The filename (not full path)
+   * @param filePath - Full path to the conversation file
+   * @param projectDir - Project directory name
+   * @param stats - File stats object
+   * @param fastMetadata - Fast metadata extracted from first 10 lines
+   * @param isArchived - Whether this is an archived conversation
+   * @returns Conversation object
+   */
+  private static buildConversationObject(
+    file: string,
+    filePath: string,
+    projectDir: string,
+    stats: fs.Stats,
+    fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean },
+    isArchived: boolean = false
+  ): Conversation {
+    // Use file mtime for timestamps by default
+    // This matches Claude Code's behavior and is fast (no parsing needed)
+    let lastMessageTime = stats.mtime;
+    let actualLastMessageTime = stats.mtime;
+
+    // Note: Cross-file summary lookup is now O(1) thanks to caching (Issue #17)
+    // However, for initial load we skip it to maintain fast performance
+    // The tree view can lazily load cross-file summaries if needed
+
+    return {
+      id: path.parse(file).name,
+      title: fastMetadata.title,
+      filePath,
+      project: projectDir,
+      lastModified: stats.mtime,
+      lastMessageTime: lastMessageTime,
+      actualLastMessageTime: actualLastMessageTime,
+      messageCount: 0, // Set to 0 for fast loading, can calculate if needed
+      fileSize: stats.size,
+      isArchived: isArchived,
+      hasRealMessages: fastMetadata.hasRealMessages,
+      isHidden: fastMetadata.isHidden
+    };
+  }
+
+  /**
    * Get all conversations from projects directory (optionally filtered to current project)
    */
   static getAllConversations(filterToCurrentProject: boolean = true, showEmpty: boolean = false): Conversation[] {
@@ -1229,49 +1362,25 @@ export class FileOperations {
         const stats = fs.statSync(filePath);
 
         try {
-          // Parse once and extract all needed metadata
-          const messages = FileOperations.parseConversation(filePath);
-          const metadata = FileOperations.extractConversationMetadata(messages, filePath);
+          // Fast metadata extraction - only reads first 10 lines instead of entire file
+          const fastMetadata = FileOperations.extractFastMetadata(filePath);
 
           // Skip empty conversations if setting is disabled
-          if (!showEmpty && !metadata.hasRealMessages) {
+          if (!showEmpty && !fastMetadata.hasRealMessages) {
             continue;
           }
 
-          // Get conversation timestamp (matches Claude Code behavior)
-          // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
-          // Priority 2: Use last message timestamp (most recent activity)
-          // Priority 3: Fall back to file mtime
-          let lastMessageTime = metadata.lastMessageTime;
-          let actualLastMessageTime = metadata.lastMessageTime;
-
-          const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
-          if (crossFileSummary) {
-            // Find the message with this UUID to get its timestamp
-            const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
-            if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
-              lastMessageTime = new Date(leafMessage.timestamp);
-              actualLastMessageTime = lastMessageTime;
-            }
-          }
-
-          // Check if conversation is hidden (linked to another conversation)
-          const isHidden = FileOperations.isHiddenFromMessages(messages);
-
-          conversations.push({
-            id: path.parse(file).name,
-            title: metadata.title,
+          // Build conversation object using shared builder method
+          const conversation = FileOperations.buildConversationObject(
+            file,
             filePath,
-            project: projectDir,
-            lastModified: stats.mtime,
-            lastMessageTime: lastMessageTime,
-            actualLastMessageTime: actualLastMessageTime,
-            messageCount: messages.length,
-            fileSize: stats.size,
-            isArchived: false,
-            hasRealMessages: metadata.hasRealMessages,
-            isHidden: isHidden
-          });
+            projectDir,
+            stats,
+            fastMetadata,
+            false // isArchived
+          );
+
+          conversations.push(conversation);
         } catch (error) {
           console.error(`Failed to parse conversation ${filePath}:`, error);
         }
@@ -1338,7 +1447,7 @@ export class FileOperations {
             try {
               const stats = await fs.promises.stat(filePath);
 
-              // Fast metadata extraction - only reads first 50 lines instead of entire file
+              // Fast metadata extraction - only reads first 10 lines instead of entire file
               let fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean };
               try {
                 fastMetadata = await FileOperations.extractFastMetadataAsync(filePath);
@@ -1352,25 +1461,15 @@ export class FileOperations {
                 return null;
               }
 
-              // Use file mtime for timestamps (fast, no parsing needed)
-              // This matches Claude Code's behavior - they prioritize file system metadata
-              const lastMessageTime = stats.mtime;
-              const actualLastMessageTime = stats.mtime;
-
-              return {
-                id: path.parse(file).name,
-                title: fastMetadata.title,
+              // Build conversation object using shared builder method
+              return FileOperations.buildConversationObject(
+                file,
                 filePath,
-                project: projectDir,
-                lastModified: stats.mtime,
-                lastMessageTime: lastMessageTime,
-                actualLastMessageTime: actualLastMessageTime,
-                messageCount: 0, // Set to 0 for now, can calculate if needed
-                fileSize: stats.size,
-                isArchived: false,
-                hasRealMessages: fastMetadata.hasRealMessages,
-                isHidden: fastMetadata.isHidden
-              };
+                projectDir,
+                stats,
+                fastMetadata,
+                false // isArchived
+              );
             } catch (error) {
               console.error(`[FileOps] Unexpected error parsing conversation ${filePath}:`, error);
               return null;
@@ -1426,49 +1525,25 @@ export class FileOperations {
         const stats = fs.statSync(filePath);
 
         try {
-          // Parse once and extract all needed metadata
-          const messages = FileOperations.parseConversation(filePath);
-          const metadata = FileOperations.extractConversationMetadata(messages, filePath);
+          // Fast metadata extraction - only reads first 10 lines instead of entire file
+          const fastMetadata = FileOperations.extractFastMetadata(filePath);
 
           // Skip empty conversations if setting is disabled
-          if (!showEmpty && !metadata.hasRealMessages) {
+          if (!showEmpty && !fastMetadata.hasRealMessages) {
             continue;
           }
 
-          // Get conversation timestamp (matches Claude Code behavior)
-          // Priority 1: If cross-file summary exists, use the leafUuid message timestamp
-          // Priority 2: Use last message timestamp (most recent activity)
-          // Priority 3: Fall back to file mtime
-          let lastMessageTime = metadata.lastMessageTime;
-          let actualLastMessageTime = metadata.lastMessageTime;
-
-          const crossFileSummary = FileOperations.findCrossFileSummaryWithUuid(filePath);
-          if (crossFileSummary) {
-            // Find the message with this UUID to get its timestamp
-            const leafMessage = messages.find(m => 'uuid' in m && m.uuid === crossFileSummary.leafUuid);
-            if (leafMessage && 'timestamp' in leafMessage && leafMessage.timestamp) {
-              lastMessageTime = new Date(leafMessage.timestamp);
-              actualLastMessageTime = lastMessageTime;
-            }
-          }
-
-          // Check if conversation is hidden (linked to another conversation)
-          const isHidden = FileOperations.isHiddenFromMessages(messages);
-
-          conversations.push({
-            id: path.parse(file).name,
-            title: metadata.title,
+          // Build conversation object using shared builder method
+          const conversation = FileOperations.buildConversationObject(
+            file,
             filePath,
-            project: projectDir,
-            lastModified: stats.mtime,
-            lastMessageTime: lastMessageTime,
-            actualLastMessageTime: actualLastMessageTime,
-            messageCount: messages.length,
-            fileSize: stats.size,
-            isArchived: true,
-            hasRealMessages: metadata.hasRealMessages,
-            isHidden: isHidden
-          });
+            projectDir,
+            stats,
+            fastMetadata,
+            true // isArchived
+          );
+
+          conversations.push(conversation);
         } catch (error) {
           console.error(`Failed to parse archived conversation ${filePath}:`, error);
         }
@@ -1541,25 +1616,15 @@ export class FileOperations {
                 return null;
               }
 
-              // Use file mtime for timestamps (fast, no parsing needed)
-              // This matches Claude Code's behavior - they prioritize file system metadata
-              const lastMessageTime = stats.mtime;
-              const actualLastMessageTime = stats.mtime;
-
-              return {
-                id: path.parse(file).name,
-                title: fastMetadata.title,
+              // Build conversation object using shared builder method
+              return FileOperations.buildConversationObject(
+                file,
                 filePath,
-                project: projectDir,
-                lastModified: stats.mtime,
-                lastMessageTime: lastMessageTime,
-                actualLastMessageTime: actualLastMessageTime,
-                messageCount: 0, // Set to 0 for now, can calculate if needed
-                fileSize: stats.size,
-                isArchived: true,
-                hasRealMessages: fastMetadata.hasRealMessages,
-                isHidden: fastMetadata.isHidden
-              };
+                projectDir,
+                stats,
+                fastMetadata,
+                true // isArchived
+              );
             } catch (error) {
               console.error(`[FileOps] Unexpected error parsing archived conversation ${filePath}:`, error);
               return null;
