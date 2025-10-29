@@ -210,10 +210,10 @@ export class FileOperations {
   }
 
   /**
-   * Parse a .jsonl conversation file
+   * Parse JSONL content into ConversationLine objects
+   * Shared logic used by both sync and async parse methods
    */
-  static parseConversation(filePath: string): ConversationLine[] {
-    const content = fs.readFileSync(filePath, 'utf-8');
+  private static parseJSONLContent(content: string, filePath: string): ConversationLine[] {
     const lines = content.split('\n').filter(line => line.trim());
 
     return lines.map(line => {
@@ -226,20 +226,20 @@ export class FileOperations {
   }
 
   /**
-   * Async version of parseConversation - uses async file I/O
+   * Parse a .jsonl conversation file (synchronous)
+   */
+  static parseConversation(filePath: string): ConversationLine[] {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return FileOperations.parseJSONLContent(content, filePath);
+  }
+
+  /**
+   * Parse a .jsonl conversation file (asynchronous)
    * Recommended for use in async contexts to avoid blocking the UI thread
    */
   static async parseConversationAsync(filePath: string): Promise<ConversationLine[]> {
     const content = await fs.promises.readFile(filePath, 'utf-8');
-    const lines = content.split('\n').filter(line => line.trim());
-
-    return lines.map(line => {
-      try {
-        return JSON.parse(line) as ConversationLine;
-      } catch (error) {
-        throw new Error(`Failed to parse line in ${filePath}: ${error}`);
-      }
-    });
+    return FileOperations.parseJSONLContent(content, filePath);
   }
 
   /**
@@ -484,74 +484,81 @@ export class FileOperations {
   }
 
   /**
+   * Check if parsed messages contain real user content (not just warmup/sidechain/metadata)
+   * Shared logic used by both hasRealMessages and hasRealMessagesAsync
+   */
+  private static checkHasRealMessagesInParsed(messages: ConversationLine[]): boolean {
+    // Look for any NON-SIDECHAIN user message that isn't just "warmup"
+    for (const line of messages) {
+      // Skip metadata
+      if ('_metadata' in line) {
+        continue;
+      }
+
+      // Skip summary messages
+      if (!FileOperations.isConversationMessage(line)) {
+        continue;
+      }
+
+      // Skip sidechain messages (warmup/initialization)
+      if (line.isSidechain) {
+        continue;
+      }
+
+      // Only look for user messages
+      if (line.type !== 'user') {
+        continue;
+      }
+
+      // Get content
+      const content = line.message?.content;
+      if (!content) {
+        continue;
+      }
+
+      // Check if there's any real user content (not just system metadata)
+      let hasRealContent = false;
+
+      if (typeof content === 'string') {
+        // String content - check if it's not a system metadata message
+        if (!/^<(ide_|system-|user-|command-)/.test(content.trim())) {
+          hasRealContent = true;
+        }
+      } else if (Array.isArray(content)) {
+        // Array content - check each text item individually
+        for (const item of content) {
+          if (item.type === 'text' && item.text) {
+            const text = item.text.trim();
+            // Skip system metadata items
+            if (/^<(ide_|system-|user-|command-)/.test(text)) {
+              continue;
+            }
+            // Found a real text item that's not system metadata
+            if (text.length > 0) {
+              hasRealContent = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (hasRealContent) {
+        // Found a real (non-sidechain) message with actual user content
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Check if conversation has any real (non-sidechain) user messages
    * Filters out warmup-only conversations that the user never actually started
    */
   static hasRealMessages(filePath: string): boolean {
     try {
       const messages = FileOperations.parseConversation(filePath);
-
-      // Look for any NON-SIDECHAIN user message that isn't just "warmup"
-      for (const line of messages) {
-        // Skip metadata
-        if ('_metadata' in line) {
-          continue;
-        }
-
-        // Skip summary messages
-        if (!FileOperations.isConversationMessage(line)) {
-          continue;
-        }
-
-        // Skip sidechain messages (warmup/initialization)
-        if (line.isSidechain) {
-          continue;
-        }
-
-        // Only look for user messages
-        if (line.type !== 'user') {
-          continue;
-        }
-
-        // Get content
-        const content = line.message?.content;
-        if (!content) {
-          continue;
-        }
-
-        // Check if there's any real user content (not just system metadata)
-        let hasRealContent = false;
-
-        if (typeof content === 'string') {
-          // String content - check if it's not a system metadata message
-          if (!/^<(ide_|system-|user-|command-)/.test(content.trim())) {
-            hasRealContent = true;
-          }
-        } else if (Array.isArray(content)) {
-          // Array content - check each text item individually
-          for (const item of content) {
-            if (item.type === 'text' && item.text) {
-              const text = item.text.trim();
-              // Skip system metadata items
-              if (/^<(ide_|system-|user-|command-)/.test(text)) {
-                continue;
-              }
-              // Found a real text item that's not system metadata
-              if (text.length > 0) {
-                hasRealContent = true;
-                break;
-              }
-            }
-          }
-        }
-
-        if (hasRealContent) {
-          // Found a real (non-sidechain) message with actual user content
-          return true;
-        }
-      }
-
-      return false;
+      return FileOperations.checkHasRealMessagesInParsed(messages);
     } catch (error) {
       return false;
     }
@@ -564,140 +571,33 @@ export class FileOperations {
   static async hasRealMessagesAsync(filePath: string): Promise<boolean> {
     try {
       const messages = await FileOperations.parseConversationAsync(filePath);
-
-      // Look for any NON-SIDECHAIN user message that isn't just "warmup"
-      for (const line of messages) {
-        // Skip metadata
-        if ('_metadata' in line) {
-          continue;
-        }
-
-        // Skip summary messages
-        if (!FileOperations.isConversationMessage(line)) {
-          continue;
-        }
-
-        // Skip sidechain messages (warmup/initialization)
-        if (line.isSidechain) {
-          continue;
-        }
-
-        // Only look for user messages
-        if (line.type !== 'user') {
-          continue;
-        }
-
-        // Get content
-        const content = line.message?.content;
-        if (!content) {
-          continue;
-        }
-
-        // Check if there's any real user content (not just system metadata)
-        let hasRealContent = false;
-
-        if (typeof content === 'string') {
-          // String content - check if it's not a system metadata message
-          if (!/^<(ide_|system-|user-|command-)/.test(content.trim())) {
-            hasRealContent = true;
-          }
-        } else if (Array.isArray(content)) {
-          // Array content - check each text item individually
-          for (const item of content) {
-            if (item.type === 'text' && item.text) {
-              const text = item.text.trim();
-              // Skip system metadata items
-              if (/^<(ide_|system-|user-|command-)/.test(text)) {
-                continue;
-              }
-              // Found a real text item that's not system metadata
-              if (text.length > 0) {
-                hasRealContent = true;
-                break;
-              }
-            }
-          }
-        }
-
-        if (hasRealContent) {
-          // Found a real (non-sidechain) message with actual user content
-          return true;
-        }
-      }
-
-      return false;
+      return FileOperations.checkHasRealMessagesInParsed(messages);
     } catch (error) {
       return false;
     }
   }
 
   /**
-   * Check if this conversation would be hidden by Claude Code
+   * Check if this conversation would be hidden by Claude Code (synchronous)
    * A conversation is hidden if it contains a summary with leafUuid pointing to another file
    */
   static isHiddenInClaudeCode(filePath: string): boolean {
     try {
       const messages = FileOperations.parseConversation(filePath);
-      const projectDir = path.dirname(filePath);
-
-      // Look for summary messages with leafUuid in this file
-      for (const message of messages) {
-        if (FileOperations.isSummaryMessage(message)) {
-          const leafUuid = message.leafUuid;
-          if (!leafUuid) {
-            continue;
-          }
-
-          // Check if this leafUuid points to a message in THIS file
-          const hasLocalMessage = messages.some(m => 'uuid' in m && m.uuid === leafUuid);
-
-          if (hasLocalMessage) {
-            // leafUuid points to a message in this file, so it's shown
-            continue;
-          }
-
-          // leafUuid points to a different file - this conversation is hidden by Claude Code
-          return true;
-        }
-      }
-
-      return false;
+      return FileOperations.isHiddenFromMessages(messages);
     } catch (error) {
       return false;
     }
   }
 
   /**
-   * Async version of isHiddenInClaudeCode - uses async file I/O
+   * Check if this conversation would be hidden by Claude Code (asynchronous)
    * A conversation is hidden if it contains a summary with leafUuid pointing to another file
    */
   static async isHiddenInClaudeCodeAsync(filePath: string): Promise<boolean> {
     try {
       const messages = await FileOperations.parseConversationAsync(filePath);
-      const projectDir = path.dirname(filePath);
-
-      // Look for summary messages with leafUuid in this file
-      for (const message of messages) {
-        if (FileOperations.isSummaryMessage(message)) {
-          const leafUuid = message.leafUuid;
-          if (!leafUuid) {
-            continue;
-          }
-
-          // Check if this leafUuid points to a message in THIS file
-          const hasLocalMessage = messages.some(m => 'uuid' in m && m.uuid === leafUuid);
-
-          if (hasLocalMessage) {
-            // leafUuid points to a message in this file, so it's shown
-            continue;
-          }
-
-          // leafUuid points to a different file - this conversation is hidden by Claude Code
-          return true;
-        }
-      }
-
-      return false;
+      return FileOperations.isHiddenFromMessages(messages);
     } catch (error) {
       return false;
     }
