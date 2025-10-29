@@ -122,6 +122,10 @@
         "command": "claudeCodeConversationManager.toggleWarmupFilter",
         "title": "Toggle Warmup-Only Conversations",
         "icon": "$(filter)"
+      },
+      {
+        "command": "claudeCodeConversationManager.debugTabInfo",
+        "title": "Claude Code: Debug Active Tab Info"
       }
     ],
     "viewsContainers": {
@@ -257,14 +261,21 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.24",
     "@types/vscode": "^1.95.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.57.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.5",
     "typescript": "^5.3.0"
   }
 }

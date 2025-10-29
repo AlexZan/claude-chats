@@ -7,3 +7,4 @@ debug/
 dist/
 .claude/settings.local.json
 metrics.json
+coverage/
