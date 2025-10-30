@@ -8,7 +8,7 @@ import { log } from './utils/logUtils';
 import { messageCache } from './utils/messageCache';
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Claude Code Conversation Manager activated');
+  console.log('Claude Chats activated');
 
   // Create tree provider and manager
   const treeProvider = new ConversationTreeProvider();

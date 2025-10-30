@@ -1,4 +1,4 @@
-# Claude Code Conversation Manager - Development Guide
+# Claude Chats - Development Guide
 
 This document contains important instructions for Claude when working on this project.
 

@@ -1,5 +1,5 @@
 # Code Duplication Analysis Report
-## Claude Code Conversation Manager - VS Code Extension
+## Claude Chats - VS Code Extension
 
 **Date:** 2025-01-29
 **Codebase Size:** ~3,414 lines across 7 TypeScript files

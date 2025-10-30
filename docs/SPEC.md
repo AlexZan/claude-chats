@@ -1,4 +1,4 @@
-# Claude Code Conversation Manager - VS Code Extension
+# Claude Chats - VS Code Extension
 
 ## Project Overview
 
