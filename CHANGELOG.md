@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2025-10-30
+
+### Changed
+
+- **README Cleanup** - Significantly simplified and cleaned up README
+  - Removed marketing language and excessive sales pitch tone
+  - Reduced from 290 lines to 63 lines for better readability
+  - Adopted Claude Code's minimal, straightforward style
+  - More honest and transparent about functionality
+  - Added note about conversation viewer being a workaround
+
 ## [0.6.0] - 2025-01-29
 
 ### 🎯 Major Refactoring & Performance Update
