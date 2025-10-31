@@ -2,7 +2,7 @@
 
 A VS Code extension for managing Claude Code conversations. Rename conversations, organize with archives, and search through your conversation history.
 
-![Claude Chats Extension](docs/images/in-action.png)
+![Claude Chats Extension](demo-rename.gif)
 
 ## Installation
 
