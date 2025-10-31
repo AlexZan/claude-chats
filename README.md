@@ -37,6 +37,7 @@ A VS Code extension for managing Claude Code conversations. Rename conversations
 - `claudeChats.showArchivedInTree` - Display archived conversations (default: `true`)
 - `claudeChats.showEmptyConversations` - Show warmup-only conversations (default: `false`)
 - `claudeChats.showStatusBarButton` - Show quick menu when chat is active (default: `true`)
+- `claudeChats.enableDebugLogs` - Write debug logs to file for troubleshooting (default: `false`)
 - `claudeChats.createBackups` - Create `.backup` files before modifications (default: `true`)
 
 ## How It Works

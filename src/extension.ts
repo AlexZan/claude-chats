@@ -4,11 +4,14 @@ import { ConversationManager } from './conversationManager';
 import { ConversationViewer } from './conversationViewer';
 import { getActiveClaudeCodeChatTab, getChatTitleFromTab } from './claudeCodeDetection';
 import { FileOperations } from './fileOperations';
-import { log } from './utils/logUtils';
+import { log, initializeDebugLogging } from './utils/logUtils';
 import { messageCache } from './utils/messageCache';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Claude Chats activated');
+
+  // Initialize debug logging (if enabled in settings)
+  initializeDebugLogging(context);
 
   // Create tree provider and manager
   const treeProvider = new ConversationTreeProvider();
@@ -301,6 +304,52 @@ export function activate(context: vscode.ExtensionContext) {
 
         await manager.delete(item.conversation);
         treeProvider.refresh();
+      }
+    )
+  );
+
+  // Command: Fix stale title (manual leafUuid update)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'claudeCodeConversationManager.fixStaleTitle',
+      async (item: ConversationTreeItem) => {
+        if (!(item instanceof ConversationTreeItem)) {
+          return;
+        }
+
+        const filePath = item.conversation.filePath;
+        log('FixTitle', `Starting fix for: ${filePath}`);
+
+        // Retry up to 3 times with 500ms delay (file might be actively changing)
+        let wasUpdated = false;
+        let attempts = 0;
+        const maxAttempts = 3;
+        const retryDelayMs = 500;
+
+        while (attempts < maxAttempts && !wasUpdated) {
+          if (attempts > 0) {
+            log('FixTitle', `Retry attempt ${attempts}/${maxAttempts - 1}`);
+            await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+          }
+
+          wasUpdated = FileOperations.autoUpdateStaleLeafUuid(filePath);
+          attempts++;
+
+          if (!wasUpdated) {
+            log('FixTitle', `Attempt ${attempts}: No stale UUID detected`);
+          }
+        }
+
+        if (wasUpdated) {
+          log('FixTitle', `Successfully updated on attempt ${attempts}`);
+          vscode.window.showInformationMessage('Title fixed! Close and reopen the chat tab to see the correct title.');
+
+          // Use targeted refresh to update the tree view
+          await treeProvider.updateSingleConversation(filePath);
+        } else {
+          log('FixTitle', `No stale UUID found after ${attempts} attempts`);
+          vscode.window.showInformationMessage('No update needed - title is already current.');
+        }
       }
     )
   );

@@ -935,32 +935,118 @@ export class FileOperations {
   }
 
   /**
-   * Find the last non-sidechain message UUID in a conversation file
-   * This is needed for the leafUuid in summary messages
+   * Find the last non-sidechain message UUID in the PRIMARY conversation chain
+   *
+   * CRITICAL: Claude Code may "compact" conversations after ~100 messages by creating
+   * a new root message (type: "system", parentUuid: null) in the middle of the file.
+   * This results in multiple conversation chains in the same file.
+   *
+   * Claude Code expects the leafUuid to point to the FIRST (primary) chain that starts
+   * immediately after the summary, NOT to any subsequent compacted chains.
+   *
+   * @param filePath Path to the conversation file
+   * @returns UUID of the last non-sidechain message in the primary chain, or null
    */
   private static findLastNonSidechainMessageUuid(filePath: string): string | null {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n').filter(line => line.trim());
 
-    // Scan backwards from the end to find last non-sidechain message
-    for (let i = lines.length - 1; i >= 0; i--) {
+    // Step 1: Find the primary chain root (first message with parentUuid: null after summary)
+    let primaryRootUuid: string | null = null;
+
+    for (let i = 0; i < lines.length; i++) {
       try {
         const message = JSON.parse(lines[i]) as ConversationLine;
+
+        // Skip summary messages
+        if (this.isSummaryMessage(message)) {
+          continue;
+        }
 
         // Skip metadata
         if ('_metadata' in message) {
           continue;
         }
 
-        // Check if it's a conversation message (user or assistant)
-        if (this.isConversationMessage(message) && !message.isSidechain && message.uuid) {
-          return message.uuid;
+        // Find first message with parentUuid: null (this is the primary chain root)
+        if (this.isConversationMessage(message) && message.parentUuid === null && message.uuid) {
+          primaryRootUuid = message.uuid;
+          log('findLastNonSidechainMessageUuid', `Found primary chain root: ${primaryRootUuid} at line ${i + 1}`);
+          break;
         }
       } catch (error) {
         continue;
       }
     }
 
+    if (!primaryRootUuid) {
+      log('findLastNonSidechainMessageUuid', 'No primary chain root found');
+      return null;
+    }
+
+    // Step 2: Build UUID index for fast parent lookups
+    const uuidIndex = new Map<string, ConversationMessage>();
+    for (const line of lines) {
+      try {
+        const message = JSON.parse(line) as ConversationLine;
+        if (this.isConversationMessage(message) && message.uuid) {
+          uuidIndex.set(message.uuid, message);
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    // Step 3: Build set of all UUIDs that belong to the primary chain
+    const primaryChainUuids = new Set<string>();
+    primaryChainUuids.add(primaryRootUuid);
+
+    // Iteratively add all messages whose parent is in the primary chain
+    let foundNew = true;
+    while (foundNew) {
+      foundNew = false;
+      for (const [uuid, message] of uuidIndex) {
+        if (primaryChainUuids.has(uuid)) {
+          continue; // Already in chain
+        }
+        if (message.parentUuid && primaryChainUuids.has(message.parentUuid)) {
+          primaryChainUuids.add(uuid);
+          foundNew = true;
+        }
+      }
+    }
+
+    log('findLastNonSidechainMessageUuid', `Primary chain has ${primaryChainUuids.size} messages`);
+
+    // Step 4: Find the last non-sidechain message in the primary chain by timestamp
+    let lastMessage: ConversationMessage | null = null;
+    let lastTimestamp = new Date(0);
+
+    for (const uuid of primaryChainUuids) {
+      const message = uuidIndex.get(uuid);
+      if (!message) continue;
+
+      // Skip sidechain messages
+      if (message.isSidechain) {
+        continue;
+      }
+
+      // Check if this message is newer than our current last
+      if (message.timestamp) {
+        const ts = new Date(message.timestamp);
+        if (ts > lastTimestamp) {
+          lastTimestamp = ts;
+          lastMessage = message;
+        }
+      }
+    }
+
+    if (lastMessage) {
+      log('findLastNonSidechainMessageUuid', `Last message in primary chain: ${lastMessage.uuid}`);
+      return lastMessage.uuid;
+    }
+
+    log('findLastNonSidechainMessageUuid', 'No non-sidechain messages found in primary chain');
     return null;
   }
 
@@ -1712,36 +1798,47 @@ export class FileOperations {
   static checkForStaleLeafUuid(filePath: string): string | null {
     try {
       const summaries = this.findSummaryMessages(filePath);
+      log('checkForStaleLeafUuid', `Checking ${filePath}`);
+      log('checkForStaleLeafUuid', `Found ${summaries.length} summaries`);
 
       if (summaries.length === 0) {
         // No summary, nothing to check
+        log('checkForStaleLeafUuid', 'No summaries found');
         return null;
       }
 
       // Get the actual last non-sidechain message UUID
       const actualLastUuid = this.findLastNonSidechainMessageUuid(filePath);
+      log('checkForStaleLeafUuid', `Actual last UUID: ${actualLastUuid}`);
 
       if (!actualLastUuid) {
         // No non-sidechain messages, can't validate
+        log('checkForStaleLeafUuid', 'No non-sidechain messages found');
         return null;
       }
 
       // Check first summary (the one Claude Code uses)
       const summary = summaries[0].summary;
+      log('checkForStaleLeafUuid', `Summary leafUuid: ${summary.leafUuid}`);
+      log('checkForStaleLeafUuid', `Summary title: ${summary.summary}`);
 
       if (!summary.leafUuid) {
         // Summary has no leafUuid, nothing to check
+        log('checkForStaleLeafUuid', 'Summary has no leafUuid');
         return null;
       }
 
       // Check if leafUuid points to actual last message
       if (summary.leafUuid !== actualLastUuid) {
+        log('checkForStaleLeafUuid', `STALE! Returning correct UUID: ${actualLastUuid}`);
         return actualLastUuid;
       }
 
       // leafUuid is current
+      log('checkForStaleLeafUuid', 'leafUuid is current');
       return null;
     } catch (error) {
+      log('checkForStaleLeafUuid', `Error: ${error}`);
       return null;
     }
   }
@@ -1753,41 +1850,67 @@ export class FileOperations {
    */
   static autoUpdateStaleLeafUuid(filePath: string): boolean {
     try {
+      log('autoUpdateStaleLeafUuid', `Starting update for: ${filePath}`);
+
       const correctLeafUuid = this.checkForStaleLeafUuid(filePath);
+      log('autoUpdateStaleLeafUuid', `Correct leafUuid: ${correctLeafUuid}`);
 
       if (!correctLeafUuid) {
         // No update needed
+        log('autoUpdateStaleLeafUuid', 'No update needed');
         return false;
       }
 
-      // Read file
+      // Read file ONCE to avoid race conditions
+      log('autoUpdateStaleLeafUuid', 'Reading file...');
       const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n');
+      log('autoUpdateStaleLeafUuid', `File has ${lines.length} lines`);
 
-      // Find and update first summary
-      const summaries = this.findSummaryMessages(filePath);
+      // Find first summary in the SAME data we just read (don't re-read file!)
+      let summaryLineIndex = -1;
+      let summaryData: SummaryMessage | null = null;
 
-      if (summaries.length === 0) {
-        // No summary to update (shouldn't happen based on checkForStaleLeafUuid)
-        return false;
+      for (let i = 0; i < Math.min(lines.length, 10); i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        try {
+          const msg = JSON.parse(line) as ConversationLine;
+          if (this.isSummaryMessage(msg)) {
+            summaryLineIndex = i;
+            summaryData = msg;
+            log('autoUpdateStaleLeafUuid', `Found summary at line ${i}: "${msg.summary}"`);
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
       }
 
-      const targetSummary = summaries[0];
+      if (summaryLineIndex === -1 || !summaryData) {
+        log('autoUpdateStaleLeafUuid', 'No summary found in file');
+        return false;
+      }
 
       // Update the summary with correct leafUuid
       const updatedSummary: SummaryMessage = {
         type: 'summary',
-        summary: targetSummary.summary.summary, // Keep existing title
+        summary: summaryData.summary, // Keep existing title
         leafUuid: correctLeafUuid
       };
 
-      lines[targetSummary.lineIndex] = JSON.stringify(updatedSummary);
+      log('autoUpdateStaleLeafUuid', `Updating line ${summaryLineIndex} with new leafUuid`);
+      lines[summaryLineIndex] = JSON.stringify(updatedSummary);
 
-      // Write back to file (no backup for auto-updates)
+      // Write back to file atomically
+      log('autoUpdateStaleLeafUuid', 'Writing file...');
       fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+      log('autoUpdateStaleLeafUuid', 'Update complete!');
 
       return true;
     } catch (error) {
+      logError('autoUpdateStaleLeafUuid', 'Error during update', error);
       return false;
     }
   }

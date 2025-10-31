@@ -2,7 +2,7 @@
   "name": "claude-chats",
   "displayName": "Claude Chats",
   "description": "Rename, organize, and archive Claude Code conversations",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "AlexZanfir",
   "author": {
     "name": "Alexander Zanfir"
@@ -127,6 +127,12 @@
         "command": "claudeCodeConversationManager.showClaudeChatsMenu",
         "title": "Claude Chats",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "claudeCodeConversationManager.fixStaleTitle",
+        "title": "Fix Title",
+        "icon": "$(wrench)",
+        "description": "Update internal reference to show correct title in Claude Code (fixes stale leafUuid)"
       }
     ],
     "viewsContainers": {
@@ -186,19 +192,29 @@
           "group": "inline@3"
         },
         {
-          "command": "claudeCodeConversationManager.toggleDone",
+          "command": "claudeCodeConversationManager.renameConversation",
           "when": "view == claudeCodeConversationTree && viewItem == conversation",
           "group": "1_actions@1"
         },
         {
-          "command": "claudeCodeConversationManager.archiveConversation",
+          "command": "claudeCodeConversationManager.toggleDone",
           "when": "view == claudeCodeConversationTree && viewItem == conversation",
           "group": "1_actions@2"
         },
         {
-          "command": "claudeCodeConversationManager.exportToMarkdown",
+          "command": "claudeCodeConversationManager.archiveConversation",
           "when": "view == claudeCodeConversationTree && viewItem == conversation",
           "group": "1_actions@3"
+        },
+        {
+          "command": "claudeCodeConversationManager.exportToMarkdown",
+          "when": "view == claudeCodeConversationTree && viewItem == conversation",
+          "group": "1_actions@4"
+        },
+        {
+          "command": "claudeCodeConversationManager.fixStaleTitle",
+          "when": "view == claudeCodeConversationTree && viewItem == conversation",
+          "group": "1_actions@5"
         },
         {
           "command": "claudeCodeConversationManager.deleteConversation",
@@ -264,6 +280,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show 'Rename' button in status bar when Claude Code chat is active"
+        },
+        "claudeChats.enableDebugLogs": {
+          "type": "boolean",
+          "default": false,
+          "description": "Write debug logs to file (claude-chats-debug.log in workspace). Useful for troubleshooting issues."
         }
       }
     }

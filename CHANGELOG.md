@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2025-10-31
+
+### Fixed
+
+- **Renamed Conversation Titles Persist in Claude Code** - Critical fix for title reversion issue
+  - Discovered Claude Code's auto-compact feature creates multiple conversation chains in a single file
+  - When conversations reach ~100 messages, Claude Code creates a new root message, splitting the conversation into primary and secondary chains
+  - Claude Code validates that `leafUuid` in the summary points to the last message in the PRIMARY chain (first chain after summary)
+  - Fixed `findLastNonSidechainMessageUuid()` to detect primary chain and return its last message instead of scanning entire file
+  - Fixed race condition in `autoUpdateStaleLeafUuid()` that caused file corruption by reading file twice
+  - Renamed conversation titles now persist correctly in both Claude Chats and Claude Code's native interface
+  - File watcher automatically maintains correct `leafUuid` values as conversations grow
+
 ## [0.6.1] - 2025-10-30
 
 ### Changed

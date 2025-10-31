@@ -216,6 +216,52 @@ function extractSummaryFromJsonl(fileContent: string): string | null {
    - Windows paths can have different casing (`C:\` vs `c:\`)
    - Backslashes vs forward slashes
 
+4. **Claude Code's Auto-Compact Creates Multiple Conversation Chains**
+   - **Critical Discovery**: When conversations reach ~100 messages, Claude Code "compacts" them
+   - Compaction creates a NEW root message (type: "system") with `parentUuid: null` somewhere in the middle of the file
+   - This results in TWO separate conversation chains in the same file:
+     - **Chain 1**: Original conversation starting from first message after summary (line 2)
+     - **Chain 2**: Compacted conversation starting from system message (e.g., line 499)
+   - Old messages (Chain 1) remain in the file but become orphaned/disconnected
+   - **Claude Code expects leafUuid to point to the ACTIVE chain** (the one starting from the first root message after the summary)
+   - If leafUuid points to Chain 2 but Claude Code expects Chain 1, the summary will be rejected
+   - **Fix**: `checkForStaleLeafUuid()` must find the PRIMARY chain (first root after summary) and use its last message as leafUuid
+   - See "leafUuid Validation Logic" section below for implementation details
+
+### leafUuid Validation Logic
+
+**Problem**: Claude Code validates that a summary's `leafUuid` points to the last message in the PRIMARY conversation chain (the one starting from the first message after the summary).
+
+**How Claude Code's Compaction Works**:
+1. Conversation starts normally with summary at line 1, first message at line 2 with `parentUuid: null`
+2. After ~100 messages, Claude Code "compacts" the conversation
+3. It inserts a new "system" message with `parentUuid: null` (e.g., at line 499)
+4. All subsequent messages chain from this new root, creating Chain 2
+5. Old messages (Chain 1) remain but become orphaned
+
+**Validation Requirements**:
+- Summary's `leafUuid` must point to the last non-sidechain message in the PRIMARY chain
+- Primary chain = the chain starting from the FIRST root message after the summary (line 2)
+- Even if there are multiple chains in the file, leafUuid must reference Chain 1
+
+**Implementation** (`checkForStaleLeafUuid`):
+1. Find summary at line 1
+2. Find first message after summary with `parentUuid: null` (this is the primary chain root)
+3. Build a set of all UUIDs that belong to this chain by following parent relationships
+4. Find the last non-sidechain message within this chain (by timestamp)
+5. If summary's leafUuid doesn't match this UUID, it's stale
+
+**Example**:
+```
+Line 1:   {"type":"summary","leafUuid":"ABC"}
+Line 2:   {"uuid":"ROOT1","parentUuid":null}  ← Primary chain starts
+Line 100: {"uuid":"ABC","parentUuid":"..."}   ← Chain 1 ends
+Line 499: {"uuid":"ROOT2","parentUuid":null}  ← Chain 2 starts (compact)
+Line 805: {"uuid":"XYZ","parentUuid":"..."}   ← Chain 2 ends
+
+Claude Code expects leafUuid = "ABC" (from Chain 1), NOT "XYZ" (from Chain 2)
+```
+
 ## Testing Checklist
 
 Before publishing:

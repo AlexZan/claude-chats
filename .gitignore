@@ -8,3 +8,4 @@ dist/
 .claude/settings.local.json
 metrics.json
 coverage/
+claude-chats-debug.log
