@@ -19,7 +19,7 @@ A VS Code extension for managing Claude Code conversations. Rename conversations
 
 **Conversation Viewer** - Opens conversations in a custom viewer with message bubbles and syntax highlighting. Claude Code doesn't currently provide a way to open past conversations programmatically, so this extension includes its own viewer.
 
-**Performance** - Efficiently loads 200+ conversations in under 2 seconds with optimized single-pass file parsing.
+**Performance** - Lightning-fast load times: reads only 1-5 lines per file (summary + first message) instead of parsing entire conversations. 200+ conversations load in under a second.
 
 ## Usage
 
