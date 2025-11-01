@@ -96,8 +96,7 @@ export class ConversationTreeItem extends vscode.TreeItem {
   private buildDescription(isHidden: boolean): string {
     const { conversation } = this;
     const relativeTime = this.getRelativeTime(conversation.lastModified);
-    const hiddenIndicator = isHidden ? '👁️‍🗨️ ' : '';
-    return `${hiddenIndicator}${conversation.messageCount} msgs • ${relativeTime}`;
+    return `${conversation.messageCount} msgs • ${relativeTime}`;
   }
 
   private getRelativeTime(date: Date): string {

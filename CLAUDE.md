@@ -13,6 +13,13 @@ This is a VS Code extension that manages Claude Code conversations (.jsonl files
 
 ## Communication Guidelines
 
+**IMPORTANT - Push Back When I'm Wrong:**
+- If something doesn't make sense or facts contradict what I'm saying, tell me directly
+- Don't let me chase "ghosts" or waste time hunting for non-existent problems
+- Better to say "that's wrong, here's why" than to let me spin wheels trying to prove an incorrect premise
+- This applies especially to technical facts (git status, file existence, compiler output, etc.)
+- Objective truth matters more than being polite
+
 **IMPORTANT**: When estimating effort or complexity:
 - **NEVER** provide estimates in human time (hours, days, weeks)
 - **ALWAYS** estimate in terms of token cost or complexity
