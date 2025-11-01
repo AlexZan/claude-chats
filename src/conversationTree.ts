@@ -267,7 +267,7 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
         lastModified: stats.mtime,
         lastMessageTime: stats.mtime,
         actualLastMessageTime: stats.mtime,
-        messageCount: 0,
+        messageCount: metadata.messageCount,
         fileSize: stats.size,
         isArchived: filePath.includes('_archive'),
         hasRealMessages: metadata.hasRealMessages,

@@ -74,18 +74,23 @@ export class FileOperations {
     title: string;
     hasRealMessages: boolean;
     isHidden: boolean;
+    messageCount: number;
   }> {
     try {
-      // Read first 10 lines only - summary is line 1, first real message usually line 4-5
+      // Read entire file for message counting
       const content = await fs.promises.readFile(filePath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim()).slice(0, 10);
+      const allLines = content.split('\n').filter(line => line.trim());
+
+      // For title/hasRealMessages, only parse first 10 lines
+      const lines = allLines.slice(0, 10);
 
       let title = 'Untitled';
       let hasRealMessages = false;
       let isHidden = false;
+      let messageCount = 0;
       const messageUuids = new Set<string>();
 
-      // Parse only the first 50 lines
+      // Parse first 10 lines for title and hasRealMessages
       const messages: ConversationLine[] = [];
       for (const line of lines) {
         try {
@@ -109,13 +114,29 @@ export class FileOperations {
         }
       }
 
-      // Check for isHidden (summary with external leafUuid)
-      for (const msg of messages) {
-        if (FileOperations.isSummaryMessage(msg) && msg.leafUuid) {
-          if (!messageUuids.has(msg.leafUuid)) {
-            isHidden = true;
-            break;
+      // Parse ALL lines to count messages and check for hidden status
+      for (const line of allLines) {
+        try {
+          const msg = JSON.parse(line) as ConversationLine;
+
+          // Collect all message UUIDs for hidden check
+          if ('uuid' in msg && msg.uuid) {
+            messageUuids.add(msg.uuid);
           }
+
+          // Count non-sidechain conversation messages (user and assistant)
+          if (FileOperations.isConversationMessage(msg) && !msg.isSidechain) {
+            messageCount++;
+          }
+
+          // Check for hidden status (summary with external leafUuid)
+          if (FileOperations.isSummaryMessage(msg) && msg.leafUuid) {
+            if (!messageUuids.has(msg.leafUuid)) {
+              isHidden = true;
+            }
+          }
+        } catch (e) {
+          // Skip malformed lines
         }
       }
 
@@ -152,9 +173,9 @@ export class FileOperations {
         }
       }
 
-      return { title, hasRealMessages, isHidden };
+      return { title, hasRealMessages, isHidden, messageCount };
     } catch (error) {
-      return { title: 'Untitled', hasRealMessages: false, isHidden: false };
+      return { title: 'Untitled', hasRealMessages: false, isHidden: false, messageCount: 0 };
     }
   }
 
@@ -167,18 +188,23 @@ export class FileOperations {
     title: string;
     hasRealMessages: boolean;
     isHidden: boolean;
+    messageCount: number;
   } {
     try {
-      // Read first 10 lines only - summary is line 1, first real message usually line 4-5
+      // Read entire file for message counting
       const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim()).slice(0, 10);
+      const allLines = content.split('\n').filter(line => line.trim());
+
+      // For title/hasRealMessages, only parse first 10 lines
+      const lines = allLines.slice(0, 10);
 
       let title = 'Untitled';
       let hasRealMessages = false;
       let isHidden = false;
+      let messageCount = 0;
       const messageUuids = new Set<string>();
 
-      // Parse only the first 10 lines
+      // Parse first 10 lines for title and hasRealMessages
       const messages: ConversationLine[] = [];
       for (const line of lines) {
         try {
@@ -202,13 +228,29 @@ export class FileOperations {
         }
       }
 
-      // Check for isHidden (summary with external leafUuid)
-      for (const msg of messages) {
-        if (FileOperations.isSummaryMessage(msg) && msg.leafUuid) {
-          if (!messageUuids.has(msg.leafUuid)) {
-            isHidden = true;
-            break;
+      // Parse ALL lines to count messages and check for hidden status
+      for (const line of allLines) {
+        try {
+          const msg = JSON.parse(line) as ConversationLine;
+
+          // Collect all message UUIDs for hidden check
+          if ('uuid' in msg && msg.uuid) {
+            messageUuids.add(msg.uuid);
           }
+
+          // Count non-sidechain conversation messages (user and assistant)
+          if (FileOperations.isConversationMessage(msg) && !msg.isSidechain) {
+            messageCount++;
+          }
+
+          // Check for hidden status (summary with external leafUuid)
+          if (FileOperations.isSummaryMessage(msg) && msg.leafUuid) {
+            if (!messageUuids.has(msg.leafUuid)) {
+              isHidden = true;
+            }
+          }
+        } catch (e) {
+          // Skip malformed lines
         }
       }
 
@@ -240,9 +282,9 @@ export class FileOperations {
         }
       }
 
-      return { title, hasRealMessages, isHidden };
+      return { title, hasRealMessages, isHidden, messageCount };
     } catch (error) {
-      return { title: 'Untitled', hasRealMessages: false, isHidden: false };
+      return { title: 'Untitled', hasRealMessages: false, isHidden: false, messageCount: 0 };
     }
   }
 
@@ -1259,7 +1301,7 @@ export class FileOperations {
     filePath: string,
     projectDir: string,
     stats: fs.Stats,
-    fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean },
+    fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean; messageCount: number },
     isArchived: boolean = false
   ): Conversation {
     // Use file mtime for timestamps by default
@@ -1279,7 +1321,7 @@ export class FileOperations {
       lastModified: stats.mtime,
       lastMessageTime: lastMessageTime,
       actualLastMessageTime: actualLastMessageTime,
-      messageCount: 0, // Set to 0 for fast loading, can calculate if needed
+      messageCount: fastMetadata.messageCount,
       fileSize: stats.size,
       isArchived: isArchived,
       hasRealMessages: fastMetadata.hasRealMessages,
@@ -1413,7 +1455,7 @@ export class FileOperations {
               const stats = await fs.promises.stat(filePath);
 
               // Fast metadata extraction - only reads first 10 lines instead of entire file
-              let fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean };
+              let fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean; messageCount: number };
               try {
                 fastMetadata = await FileOperations.extractFastMetadataAsync(filePath);
               } catch (metaError) {
@@ -1568,7 +1610,7 @@ export class FileOperations {
               const stats = await fs.promises.stat(filePath);
 
               // Use fast metadata extraction (only reads first 10 lines)
-              let fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean };
+              let fastMetadata: { title: string; hasRealMessages: boolean; isHidden: boolean; messageCount: number };
               try {
                 fastMetadata = await FileOperations.extractFastMetadataAsync(filePath);
               } catch (metaError) {
