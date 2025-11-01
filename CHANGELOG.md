@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-11-01
+
+### Changed
+
+- **Major Performance Improvement** - Dramatically faster initial load times
+  - Now reads only 1-5 lines per file (summary + first message) instead of entire conversation
+  - Rule-based parsing: stops when title and hasRealMessages flag are found
+  - Typical reduction: 5 lines read vs 800+ lines (160x improvement for large conversations)
+  - 200+ conversations now load in under a second
+
+- **Message Count Made Optional**
+  - Tree view no longer shows message count during initial load
+  - Shows only relative time (e.g., "2 hours ago") until full file is parsed
+  - Count computed lazily when user opens conversation, searches, or exports
+  - Nearly free since we're already parsing the full file at that point
+
+- **Hidden Conversation Detection Removed**
+  - Skipped during initial load (rare edge case not worth parsing entire files)
+  - Hidden conversations now show with normal icon instead of eye-closed
+  - Trade-off: faster load times for 99% of users vs detecting rare edge cases
+
+### Added
+
+- **Architecture Decision Log** - Created `docs/DECISIONS.md` to document performance trade-offs and rationale
+
 ## [0.6.6] - 2025-11-01
 
 ### Fixed
