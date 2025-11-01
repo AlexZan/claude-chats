@@ -88,7 +88,6 @@ export class FileOperations {
       let hasRealMessages = false;
       let isHidden = false;
       let messageCount = 0;
-      const messageUuids = new Set<string>();
 
       // Parse first 10 lines for title and hasRealMessages
       const messages: ConversationLine[] = [];
@@ -96,11 +95,6 @@ export class FileOperations {
         try {
           const msg = JSON.parse(line) as ConversationLine;
           messages.push(msg);
-
-          // Collect message UUIDs for hidden check
-          if ('uuid' in msg && msg.uuid) {
-            messageUuids.add(msg.uuid);
-          }
         } catch (e) {
           // Skip malformed lines
         }
@@ -114,31 +108,24 @@ export class FileOperations {
         }
       }
 
-      // Parse ALL lines to count messages and check for hidden status
+      // Parse ALL lines to count messages and build message list
+      const allMessages: ConversationLine[] = [];
       for (const line of allLines) {
         try {
           const msg = JSON.parse(line) as ConversationLine;
-
-          // Collect all message UUIDs for hidden check
-          if ('uuid' in msg && msg.uuid) {
-            messageUuids.add(msg.uuid);
-          }
+          allMessages.push(msg);
 
           // Count non-sidechain conversation messages (user and assistant)
           if (FileOperations.isConversationMessage(msg) && !msg.isSidechain) {
             messageCount++;
           }
-
-          // Check for hidden status (summary with external leafUuid)
-          if (FileOperations.isSummaryMessage(msg) && msg.leafUuid) {
-            if (!messageUuids.has(msg.leafUuid)) {
-              isHidden = true;
-            }
-          }
         } catch (e) {
           // Skip malformed lines
         }
       }
+
+      // Use proper hidden detection that checks if leafUuid points to external file
+      isHidden = FileOperations.isHiddenFromMessages(allMessages);
 
       // Extract title from first 10 lines
       // Priority 1: First non-warmup summary found
@@ -623,18 +610,22 @@ export class FileOperations {
           // Check if this leafUuid points to a message in THIS file
           const hasLocalMessage = messages.some(m => 'uuid' in m && m.uuid === leafUuid);
 
+          console.log(`[isHiddenFromMessages] leafUuid: ${leafUuid}, found in this file: ${hasLocalMessage}, total messages: ${messages.length}`);
+
           if (hasLocalMessage) {
             // leafUuid points to a message in this file, so it's shown
             continue;
           }
 
           // leafUuid points to a different file - this conversation is hidden by Claude Code
+          console.log(`[isHiddenFromMessages] Conversation IS HIDDEN - leafUuid not found in file`);
           return true;
         }
       }
 
       return false;
     } catch (error) {
+      console.error(`[isHiddenFromMessages] Error:`, error);
       return false;
     }
   }
