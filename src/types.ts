@@ -41,7 +41,7 @@ export interface Conversation {
   lastModified: Date;
   lastMessageTime: Date; // Display time (first user message or leafUuid message)
   actualLastMessageTime: Date; // Actual last message time (for tiebreaking)
-  messageCount: number;
+  messageCount?: number; // Optional: computed on-demand when full file is parsed
   fileSize: number;
   isArchived: boolean;
   hasRealMessages: boolean; // Whether conversation has real user messages (not just warmup)

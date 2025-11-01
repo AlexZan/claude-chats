@@ -102,7 +102,13 @@ export class ConversationTreeItem extends vscode.TreeItem {
   private buildDescription(isHidden: boolean): string {
     const { conversation } = this;
     const relativeTime = this.getRelativeTime(conversation.lastModified);
-    return `${conversation.messageCount} msgs • ${relativeTime}`;
+
+    // Only show message count if we have it (computed on full file parse)
+    if (conversation.messageCount !== undefined && conversation.messageCount > 0) {
+      return `${conversation.messageCount} msgs • ${relativeTime}`;
+    }
+
+    return relativeTime;
   }
 
   private getRelativeTime(date: Date): string {
@@ -272,11 +278,11 @@ export class ConversationTreeProvider implements vscode.TreeDataProvider<vscode.
         lastModified: stats.mtime,
         lastMessageTime: stats.mtime,
         actualLastMessageTime: stats.mtime,
-        messageCount: metadata.messageCount,
+        messageCount: undefined, // Computed on-demand when full file is parsed
         fileSize: stats.size,
         isArchived: filePath.includes('_archive'),
         hasRealMessages: metadata.hasRealMessages,
-        isHidden: metadata.isHidden
+        isHidden: false // Skip hidden detection during initial load (rare edge case)
       };
 
       // Update in the appropriate cache
