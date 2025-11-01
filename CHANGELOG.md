@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2025-11-01
+
+### Fixed
+
+- **Hidden Detection Logic** - Fixed critical bug in async metadata extraction
+  - The async `extractFastMetadataAsync()` was checking if leafUuid existed DURING iteration, before all messages were parsed
+  - This caused normal conversations to incorrectly show as hidden
+  - Both sync and async versions now parse ALL messages first, then call `isHiddenFromMessages()`
+  - Conversations like "Main Work" no longer incorrectly show eye-closed icon
+
+### Added
+
+- **Distinct Icons for Different Conversation Types**
+  - Normal conversations: `comment-discussion` icon
+  - Warmup-only conversations (no real user messages): `circle-slash` icon
+  - Hidden conversations (cross-file references): `eye-closed` icon
+  - Archived conversations: `archive` icon
+  - Updated tooltips to explain each conversation type
+
+### Changed
+
+- Removed redundant right-side eye emoji from conversation descriptions (kept left-side icons only)
+
 ## [0.6.5] - 2025-11-01
 
 ### Fixed
