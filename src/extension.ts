@@ -4,7 +4,8 @@ import { ConversationManager } from './conversationManager';
 import { ConversationViewer } from './conversationViewer';
 import { getActiveClaudeCodeChatTab, getChatTitleFromTab } from './claudeCodeDetection';
 import { FileOperations } from './fileOperations';
-import { log, initializeDebugLogging } from './utils/logUtils';
+import { log, logError, initializeDebugLogging } from './utils/logUtils';
+import { normalizePath } from './utils/pathUtils';
 import { messageCache } from './utils/messageCache';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -496,16 +497,33 @@ export function activate(context: vscode.ExtensionContext) {
   // Only watch the current project directory to avoid unnecessary refreshes
   const path = require('path');
   const os = require('os');
+  const fs = require('fs');
   const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
 
   // Get current project directory
-  const { FileOperations } = require('./fileOperations');
   const currentProject = FileOperations.getCurrentProjectName();
 
   // Watch only current project's .jsonl files (not all projects)
   const currentProjectPath = currentProject ? path.join(claudeProjectsPath, currentProject) : claudeProjectsPath;
+  const projectDirExists = fs.existsSync(currentProjectPath);
+
+  // Log detailed information about the watcher setup
+  log('FileWatcher', 'Setting up file watcher', {
+    workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    projectName: currentProject,
+    projectPath: currentProjectPath,
+    projectDirExists: projectDirExists,
+    claudeProjectsPath: claudeProjectsPath,
+    watchPattern: '*.jsonl'
+  });
+
   const watchPattern = new vscode.RelativePattern(currentProjectPath, '*.jsonl');
   const watcher = vscode.workspace.createFileSystemWatcher(watchPattern);
+
+  log('FileWatcher', 'File watcher created successfully', {
+    watchingPath: currentProjectPath,
+    pattern: '*.jsonl'
+  });
 
   // Debounce map to handle rapid file writes
   const debounceTimers = new Map<string, NodeJS.Timeout>();
@@ -514,14 +532,35 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Handle file creation (new conversations) with debouncing
   watcher.onDidCreate((uri) => {
+    const normalizedFilePath = normalizePath(uri.fsPath);
+    const normalizedProjectPath = normalizePath(currentProjectPath);
+    const isInExpectedPath = normalizedFilePath.startsWith(normalizedProjectPath);
+
+    log('FileWatcher:Create', 'File creation detected', {
+      filePath: uri.fsPath,
+      expectedPath: currentProjectPath,
+      isBackup: uri.fsPath.endsWith('.backup'),
+      isInExpectedPath: isInExpectedPath
+    });
+
     // Skip backup files
     if (uri.fsPath.endsWith('.backup')) {
+      log('FileWatcher:Create', 'Ignoring backup file');
+      return;
+    }
+
+    // SAFEGUARD: Ensure file is in the expected project directory
+    if (!isInExpectedPath) {
+      logError('FileWatcher:Create', 'SECURITY: File creation outside expected project directory!', {
+        filePath: uri.fsPath,
+        expectedPath: currentProjectPath
+      });
       return;
     }
 
     // Skip refresh if tree is currently loading - avoid interrupting the initial load
     if (treeProvider.isCurrentlyLoading()) {
-      log('FileWatcher', `Ignoring file creation during load: ${uri.fsPath}`);
+      log('FileWatcher:Create', `Ignoring file creation during load: ${uri.fsPath}`);
       return;
     }
 
@@ -536,7 +575,6 @@ export function activate(context: vscode.ExtensionContext) {
       createDebounceTimers.delete(uri.fsPath);
 
       // Check if this is a warmup-only conversation before refreshing
-      const { FileOperations } = require('./fileOperations');
       const hasRealMessages = await FileOperations.hasRealMessagesAsync(uri.fsPath);
 
       if (!hasRealMessages) {
@@ -547,7 +585,6 @@ export function activate(context: vscode.ExtensionContext) {
       log('FileWatcher', `New conversation detected: ${uri.fsPath}`);
 
       // Invalidate cross-file summary cache for this project
-      const path = require('path');
       const projectDir = path.dirname(uri.fsPath);
       FileOperations.invalidateCrossFileSummaryCache(projectDir);
 
@@ -560,13 +597,32 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Handle file deletion
   watcher.onDidDelete((uri) => {
-    // Skip refresh if tree is currently loading
-    if (treeProvider.isCurrentlyLoading()) {
-      log('FileWatcher', `Ignoring file deletion during load: ${uri.fsPath}`);
+    const normalizedFilePath = normalizePath(uri.fsPath);
+    const normalizedProjectPath = normalizePath(currentProjectPath);
+    const isInExpectedPath = normalizedFilePath.startsWith(normalizedProjectPath);
+
+    log('FileWatcher:Delete', 'File deletion detected', {
+      filePath: uri.fsPath,
+      expectedPath: currentProjectPath,
+      isInExpectedPath: isInExpectedPath
+    });
+
+    // SAFEGUARD: Ensure file is in the expected project directory
+    if (!isInExpectedPath) {
+      logError('FileWatcher:Delete', 'SECURITY: File deletion outside expected project directory!', {
+        filePath: uri.fsPath,
+        expectedPath: currentProjectPath
+      });
       return;
     }
 
-    log('FileWatcher', `Conversation deleted: ${uri.fsPath}`);
+    // Skip refresh if tree is currently loading
+    if (treeProvider.isCurrentlyLoading()) {
+      log('FileWatcher:Delete', `Ignoring file deletion during load: ${uri.fsPath}`);
+      return;
+    }
+
+    log('FileWatcher:Delete', `Conversation deleted: ${uri.fsPath}`);
 
     // Clear any pending debounce for this file
     const existingTimer = debounceTimers.get(uri.fsPath);
@@ -576,8 +632,6 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // Invalidate cross-file summary cache for this project
-    const { FileOperations } = require('./fileOperations');
-    const path = require('path');
     const projectDir = path.dirname(uri.fsPath);
     FileOperations.invalidateCrossFileSummaryCache(projectDir);
 
@@ -587,14 +641,35 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Handle file changes with debouncing and auto-update
   watcher.onDidChange((uri) => {
+    const normalizedFilePath = normalizePath(uri.fsPath);
+    const normalizedProjectPath = normalizePath(currentProjectPath);
+    const isInExpectedPath = normalizedFilePath.startsWith(normalizedProjectPath);
+
+    log('FileWatcher:Change', 'File change detected', {
+      filePath: uri.fsPath,
+      expectedPath: currentProjectPath,
+      isBackup: uri.fsPath.endsWith('.backup'),
+      isInExpectedPath: isInExpectedPath
+    });
+
     // Skip backup files
     if (uri.fsPath.endsWith('.backup')) {
+      log('FileWatcher:Change', 'Ignoring backup file');
+      return;
+    }
+
+    // SAFEGUARD: Ensure file is in the expected project directory
+    if (!isInExpectedPath) {
+      logError('FileWatcher:Change', 'SECURITY: File change outside expected project directory!', {
+        filePath: uri.fsPath,
+        expectedPath: currentProjectPath
+      });
       return;
     }
 
     // Skip refresh if tree is currently loading
     if (treeProvider.isCurrentlyLoading()) {
-      log('FileWatcher', `Ignoring file change during load: ${uri.fsPath}`);
+      log('FileWatcher:Change', `Ignoring file change during load: ${uri.fsPath}`);
       return;
     }
 
@@ -609,7 +684,6 @@ export function activate(context: vscode.ExtensionContext) {
       debounceTimers.delete(uri.fsPath);
 
       // Check if this is a warmup-only conversation before refreshing
-      const { FileOperations } = require('./fileOperations');
       const hasRealMessages = await FileOperations.hasRealMessagesAsync(uri.fsPath);
 
       if (!hasRealMessages) {
@@ -630,7 +704,6 @@ export function activate(context: vscode.ExtensionContext) {
         // No notification - leafUuid update is internal maintenance, title didn't change
 
         // Invalidate cross-file cache since leafUuid might have changed
-        const path = require('path');
         const projectDir = path.dirname(uri.fsPath);
         FileOperations.invalidateCrossFileSummaryCache(projectDir);
       }
