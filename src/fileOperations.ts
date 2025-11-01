@@ -610,22 +610,18 @@ export class FileOperations {
           // Check if this leafUuid points to a message in THIS file
           const hasLocalMessage = messages.some(m => 'uuid' in m && m.uuid === leafUuid);
 
-          console.log(`[isHiddenFromMessages] leafUuid: ${leafUuid}, found in this file: ${hasLocalMessage}, total messages: ${messages.length}`);
-
           if (hasLocalMessage) {
             // leafUuid points to a message in this file, so it's shown
             continue;
           }
 
           // leafUuid points to a different file - this conversation is hidden by Claude Code
-          console.log(`[isHiddenFromMessages] Conversation IS HIDDEN - leafUuid not found in file`);
           return true;
         }
       }
 
       return false;
     } catch (error) {
-      console.error(`[isHiddenFromMessages] Error:`, error);
       return false;
     }
   }

@@ -40,10 +40,13 @@ export class ConversationTreeItem extends vscode.TreeItem {
     this.description = this.buildDescription(isHidden);
     this.contextValue = conversation.isArchived ? 'archivedConversation' : 'conversation';
 
-    // Use different icon for hidden conversations
+    // Use different icons for different conversation types
+    const isWarmupOnly = !conversation.hasRealMessages;
     this.iconPath = new vscode.ThemeIcon(
       conversation.isArchived ? 'archive' :
-      isHidden ? 'eye-closed' : 'comment-discussion'
+      isHidden ? 'eye-closed' :  // Cross-file hidden conversations
+      isWarmupOnly ? 'circle-slash' :  // Warmup-only conversations (no real messages)
+      'comment-discussion'  // Normal conversations
     );
 
     // Make the item clickable - opens the conversation file when clicked
@@ -76,6 +79,7 @@ export class ConversationTreeItem extends vscode.TreeItem {
     const { conversation } = this;
     const size = this.formatFileSize(conversation.fileSize);
     const date = conversation.lastModified.toLocaleString();
+    const isWarmupOnly = !conversation.hasRealMessages;
 
     const lines = [
       `Title: ${conversation.title}`,
@@ -88,6 +92,8 @@ export class ConversationTreeItem extends vscode.TreeItem {
 
     if (isHidden) {
       lines.push('', 'ℹ️ Hidden in Claude Code (linked to another conversation)');
+    } else if (isWarmupOnly) {
+      lines.push('', 'ℹ️ Warmup-only conversation (no real user messages)');
     }
 
     return lines.join('\n');
