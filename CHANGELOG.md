@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2025-11-01
+
+### Fixed
+
+- **File Watcher Path Comparison Bug** - Fixed critical bug preventing extension from loading
+  - File watcher was rejecting all file events due to Windows path case-insensitivity (c: vs C:)
+  - Resulted in "There is no data provider registered that can provide the view data" error
+  - Added `normalizePath` usage in all file watcher handlers (onCreate, onDelete, onChange)
+  - Paths are now compared after normalization for case-insensitive and slash-style consistency
+
+## [0.6.4] - 2025-11-01
+
+### Fixed
+
+- **False Hidden Status Indicator** - Fixed conversations showing eye icon when they're not hidden
+  - Root cause: Hidden detection was only checking first 10 lines of file for leafUuid references
+  - In longer conversations, leafUuid legitimately points beyond line 10 (e.g., to line 100+)
+  - Extension now correctly parses entire file to determine if leafUuid points to external file
+  - Conversations visible in Claude Code no longer display incorrect hidden status indicators
+  - Properly distinguishes between true cross-file references (hidden) and normal in-file references
+
 ## [0.6.2] - 2025-10-31
 
 ### Fixed
