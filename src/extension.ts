@@ -201,6 +201,15 @@ export function activate(context: vscode.ExtensionContext) {
           await manager.rename(conversation, newTitle);
           // Use targeted refresh instead of full reload
           await treeProvider.updateSingleConversation(conversation.filePath);
+
+          // Auto-close the Claude Code tab so it can be reopened with the new title
+          const claudeTab = getActiveClaudeCodeChatTab();
+          if (claudeTab) {
+            await vscode.window.tabGroups.close(claudeTab);
+            vscode.window.showInformationMessage(`Renamed to "${newTitle}". Tab closed - reopen from Claude Code history to see new title.`);
+          } else {
+            vscode.window.showInformationMessage(`Renamed to "${newTitle}".`);
+          }
         }
       }
     )
@@ -419,7 +428,15 @@ export function activate(context: vscode.ExtensionContext) {
           if (newTitle) {
             await manager.rename(conversation, newTitle);
             await treeProvider.updateSingleConversation(conversation.filePath);
-            vscode.window.showInformationMessage('Conversation renamed. Close and reopen chat tab to see updated title.');
+
+            // Auto-close the Claude Code tab so it can be reopened with the new title
+            const claudeTab = getActiveClaudeCodeChatTab();
+            if (claudeTab) {
+              await vscode.window.tabGroups.close(claudeTab);
+              vscode.window.showInformationMessage(`Renamed to "${newTitle}". Tab closed - reopen from Claude Code history to see new title.`);
+            } else {
+              vscode.window.showInformationMessage(`Renamed to "${newTitle}".`);
+            }
           }
         } else if (selected.label.includes('Done') || selected.label.includes('Undone')) {
           // Toggle done action

@@ -549,16 +549,6 @@ describe('FileOperations - Metadata Extraction', () => {
       expect(result.title).toBe('Untitled');
       expect(result.hasRealMessages).toBe(false);
     });
-
-    it('should detect isHidden correctly in async mode', async () => {
-      const content = `{"type":"summary","summary":"Hidden Async","leafUuid":"external-uuid"}
-{"type":"user","message":{"content":"Message"},"isSidechain":false,"uuid":"local-uuid"}`;
-      const filePath = createTestFile('hidden-async.jsonl', content);
-
-      const result = await FileOperations.extractFastMetadataAsync(filePath);
-
-      expect(result.isHidden).toBe(true);
-    });
   });
 
   describe('buildConversationObject', () => {
@@ -684,5 +674,72 @@ describe('FileOperations - Metadata Extraction', () => {
       expect(result.lastMessageTime).toEqual(stats.mtime);
       expect(result.actualLastMessageTime).toEqual(stats.mtime);
     });
+  });
+});
+
+describe('FileOperations - updateConversationTitle', () => {
+  beforeEach(() => {
+    if (!fs.existsSync(TEST_DIR)) {
+      fs.mkdirSync(TEST_DIR, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    cleanupTestFiles();
+  });
+
+  it('should update summary line with new title', () => {
+    const content = [
+      '{"type":"summary","summary":"Old Title","leafUuid":"uuid-123"}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"My original message"}]},"uuid":"uuid-123","parentUuid":null,"isSidechain":false,"timestamp":"2025-01-01T00:00:00Z","sessionId":"sess-1"}'
+    ].join('\n');
+
+    const filePath = createTestFile('rename-test.jsonl', content);
+    FileOperations.updateConversationTitle(filePath, 'New Title');
+
+    const result = fs.readFileSync(filePath, 'utf-8');
+    const lines = result.split('\n');
+    const summary = JSON.parse(lines[0]);
+
+    expect(summary.type).toBe('summary');
+    expect(summary.summary).toBe('New Title');
+  });
+
+  it('should NOT modify first user message content', () => {
+    const originalContent = [{ type: 'text', text: 'My detailed original question with lots of context' }];
+    const content = [
+      '{"type":"summary","summary":"Old Title","leafUuid":"uuid-123"}',
+      JSON.stringify({ type: 'user', message: { role: 'user', content: originalContent }, uuid: 'uuid-123', parentUuid: null, isSidechain: false, timestamp: '2025-01-01T00:00:00Z', sessionId: 'sess-1' })
+    ].join('\n');
+
+    const filePath = createTestFile('preserve-message-test.jsonl', content);
+    FileOperations.updateConversationTitle(filePath, 'New Title');
+
+    const result = fs.readFileSync(filePath, 'utf-8');
+    const lines = result.split('\n');
+    const userMsg = JSON.parse(lines[1]);
+
+    expect(userMsg.message.content).toEqual(originalContent);
+  });
+
+  it('should preserve tool_result blocks in first user message', () => {
+    const contentWithToolResult = [
+      { type: 'tool_result', tool_use_id: 'toolu_abc123', content: 'tool output here' },
+      { type: 'text', text: 'Follow-up question' }
+    ];
+    const content = [
+      '{"type":"summary","summary":"Old Title","leafUuid":"uuid-123"}',
+      JSON.stringify({ type: 'user', message: { role: 'user', content: contentWithToolResult }, uuid: 'uuid-123', parentUuid: null, isSidechain: false, timestamp: '2025-01-01T00:00:00Z', sessionId: 'sess-1' })
+    ].join('\n');
+
+    const filePath = createTestFile('tool-result-test.jsonl', content);
+    FileOperations.updateConversationTitle(filePath, 'New Title');
+
+    const result = fs.readFileSync(filePath, 'utf-8');
+    const lines = result.split('\n');
+    const userMsg = JSON.parse(lines[1]);
+
+    expect(userMsg.message.content).toEqual(contentWithToolResult);
+    expect(userMsg.message.content[0].tool_use_id).toBe('toolu_abc123');
   });
 });

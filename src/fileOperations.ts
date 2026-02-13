@@ -1223,7 +1223,9 @@ export class FileOperations {
       .replace(/^([a-zA-Z]):\\/, (_match: string, drive: string) => drive.toLowerCase() + '--')
       .replace(/^([a-zA-Z]):\//, (_match: string, drive: string) => drive.toLowerCase() + '--')
       .replace(/\\/g, '-')
-      .replace(/\//g, '-');
+      .replace(/\//g, '-')
+      .replace(/ /g, '-')
+      .replace(/~/g, '-');
 
     return normalized;
   }
