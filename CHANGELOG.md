@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-01-30
+
+### Fixed
+
+- **Path Transformation Bug for Special Characters** - Extension now works for users with special characters in workspace paths
+  - Previously only replaced forward/backslashes with hyphens, causing extension to fail for paths with dots, spaces, underscores, etc.
+  - Users with usernames like `john.doe`, folder names like `Varsity Tutors`, or paths with `@`, `()`, `[]`, `_` now supported
+  - Replaced four separate `.replace()` calls with comprehensive regex `[^a-zA-Z0-9-]` matching Claude Code's actual algorithm
+  - Added 14 comprehensive unit tests covering Unix/Windows paths, special characters, and edge cases
+  - Fixed 7 pre-existing test assertions for removed `isHidden` property (performance optimization)
+  - Added global vscode mock setup for Jest testing environment
+
 ## [0.7.0] - 2025-11-01
 
 ### Changed

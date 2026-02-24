@@ -17,6 +17,8 @@ module.exports = {
     '/out/',
     '/.vscode-test/'
   ],
+  // Setup file to mock vscode globally
+  setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
   // Increase timeout for file I/O operations
   testTimeout: 10000
 };

@@ -1219,11 +1219,10 @@ export class FileOperations {
     // e.g., "D:\Dev\MyProject" -> "d--Dev-MyProject"
     // e.g., "c:\Users\Lex\bot-testa" -> "c--Users-Lex-bot-testa"
     // First handle drive letter (C: -> c--), then replace remaining slashes
-    let normalized = workspacePath
+    const normalized = workspacePath
       .replace(/^([a-zA-Z]):\\/, (_match: string, drive: string) => drive.toLowerCase() + '--')
       .replace(/^([a-zA-Z]):\//, (_match: string, drive: string) => drive.toLowerCase() + '--')
-      .replace(/\\/g, '-')
-      .replace(/\//g, '-');
+      .replace(/[^a-zA-Z0-9-]/g, '-');
 
     return normalized;
   }
