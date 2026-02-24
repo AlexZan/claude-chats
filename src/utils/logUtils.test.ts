@@ -23,8 +23,8 @@ describe('LogUtils', () => {
     it('should return formatted timestamp with milliseconds', () => {
       const timestamp = getTimestamp();
 
-      // Format: HH:MM:SS.mmm
-      expect(timestamp).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+      // Format: YYYY-MM-DD HH:MM:SS.mmm
+      expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/);
     });
 
     it('should pad milliseconds to 3 digits', () => {
@@ -53,7 +53,7 @@ describe('LogUtils', () => {
       expect(logSpy).toHaveBeenCalledTimes(1);
       const loggedMessage = logSpy.mock.calls[0][0];
 
-      expect(loggedMessage).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[TestSource\] Test message$/);
+      expect(loggedMessage).toMatch(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[TestSource\] Test message$/);
     });
 
     it('should log message with data', () => {
@@ -62,7 +62,7 @@ describe('LogUtils', () => {
 
       expect(logSpy).toHaveBeenCalledTimes(1);
       expect(logSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[TestSource\] Test message$/),
+        expect.stringMatching(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[TestSource\] Test message$/),
         data
       );
     });
@@ -80,13 +80,13 @@ describe('LogUtils', () => {
   });
 
   describe('logError', () => {
-    it('should log error message with timestamp and source', () => {
+    it('should log error message with timestamp, ERROR tag, and source', () => {
       logError('TestSource', 'Error occurred');
 
       expect(errorSpy).toHaveBeenCalledTimes(1);
       const loggedMessage = errorSpy.mock.calls[0][0];
 
-      expect(loggedMessage).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[TestSource\] Error occurred$/);
+      expect(loggedMessage).toMatch(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[ERROR\] \[TestSource\] Error occurred$/);
     });
 
     it('should log error with error object', () => {
@@ -95,7 +95,7 @@ describe('LogUtils', () => {
 
       expect(errorSpy).toHaveBeenCalledTimes(1);
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[TestSource\] Operation failed$/),
+        expect.stringMatching(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[ERROR\] \[TestSource\] Operation failed$/),
         error
       );
     });
