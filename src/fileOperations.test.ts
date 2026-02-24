@@ -408,7 +408,7 @@ describe('FileOperations - Metadata Extraction', () => {
 
       expect(result.title).toBe('Test Conversation Title');
       expect(result.hasRealMessages).toBe(true);
-      // expect(result.isHidden).toBe(false); // isHidden not returned for performance
+      expect(result.isHidden).toBe(false);
     });
 
     it('should extract title from first user message when no summary', () => {
@@ -448,7 +448,7 @@ describe('FileOperations - Metadata Extraction', () => {
 
       const result = FileOperations.extractFastMetadata(filePath);
 
-      // expect(result.isHidden).toBe(true); // isHidden not returned for performance
+      expect(result.isHidden).toBe(true);
     });
 
     it('should detect isHidden=false for local summary', () => {
@@ -458,7 +458,7 @@ describe('FileOperations - Metadata Extraction', () => {
 
       const result = FileOperations.extractFastMetadata(filePath);
 
-      // expect(result.isHidden).toBe(false); // isHidden not returned for performance
+      expect(result.isHidden).toBe(false);
     });
 
     it('should return Untitled for empty file', () => {
@@ -468,7 +468,7 @@ describe('FileOperations - Metadata Extraction', () => {
 
       expect(result.title).toBe('Untitled');
       expect(result.hasRealMessages).toBe(false);
-      // expect(result.isHidden).toBe(false); // isHidden not returned for performance
+      expect(result.isHidden).toBe(false);
     });
 
     it('should truncate long user message to 100 chars', () => {
@@ -538,7 +538,9 @@ describe('FileOperations - Metadata Extraction', () => {
       const syncResult = FileOperations.extractFastMetadata(filePath);
       const asyncResult = await FileOperations.extractFastMetadataAsync(filePath);
 
-      expect(syncResult).toEqual(asyncResult);
+      // Async version returns fewer fields (no isHidden/messageCount for performance)
+      expect(asyncResult.title).toBe(syncResult.title);
+      expect(asyncResult.hasRealMessages).toBe(syncResult.hasRealMessages);
     });
 
     it('should handle empty file asynchronously', async () => {
@@ -548,16 +550,6 @@ describe('FileOperations - Metadata Extraction', () => {
 
       expect(result.title).toBe('Untitled');
       expect(result.hasRealMessages).toBe(false);
-    });
-
-    it('should detect isHidden correctly in async mode', async () => {
-      const content = `{"type":"summary","summary":"Hidden Async","leafUuid":"external-uuid"}
-{"type":"user","message":{"content":"Message"},"isSidechain":false,"uuid":"local-uuid"}`;
-      const filePath = createTestFile('hidden-async.jsonl', content);
-
-      const result = await FileOperations.extractFastMetadataAsync(filePath);
-
-      // expect(result.isHidden).toBe(true); // isHidden not returned for performance
     });
   });
 
@@ -587,10 +579,10 @@ describe('FileOperations - Metadata Extraction', () => {
       expect(result.project).toBe('test-project');
       expect(result.lastModified).toEqual(stats.mtime);
       expect(result.lastMessageTime).toEqual(stats.mtime);
-      expect(result.messageCount).toBe(0);
+      expect(result.messageCount).toBeUndefined(); // Computed on-demand, not during fast load
       expect(result.isArchived).toBe(false);
       expect(result.hasRealMessages).toBe(true);
-      // expect(result.isHidden).toBe(false); // isHidden not returned for performance
+      expect(result.isHidden).toBe(false);
     });
 
     it('should set isArchived=true when specified', () => {
@@ -635,10 +627,10 @@ describe('FileOperations - Metadata Extraction', () => {
       );
 
       expect(result.hasRealMessages).toBe(false);
-      expect(result.messageCount).toBe(0);
+      expect(result.messageCount).toBeUndefined(); // Computed on-demand, not during fast load
     });
 
-    it('should handle hidden conversations', () => {
+    it('should always set isHidden=false (skipped for performance)', () => {
       const testFile = 'hidden-conv.jsonl';
       const testPath = path.join(TEST_DIR, testFile);
       const content = `{"type":"summary","summary":"Hidden","leafUuid":"external"}`;
@@ -657,7 +649,8 @@ describe('FileOperations - Metadata Extraction', () => {
         false
       );
 
-      // expect(result.isHidden).toBe(true); // isHidden not returned for performance
+      // buildConversationObject always returns isHidden: false (detection skipped for performance)
+      expect(result.isHidden).toBe(false);
     });
 
     it('should use file mtime for timestamps', () => {
